@@ -21,6 +21,7 @@ Apos consolidar os materiais, o sistema organiza automaticamente os itens em cat
 - Alvenaria
 - Cobertura
 - Esquadrias
+- Portas e janelas
 - Instalacoes hidraulicas
 - Instalacoes eletricas
 - Revestimentos internos

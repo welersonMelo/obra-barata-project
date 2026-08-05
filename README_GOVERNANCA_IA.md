@@ -102,6 +102,7 @@ Os materiais devem ser organizados automaticamente nas seguintes categorias:
 - Alvenaria
 - Cobertura
 - Esquadrias
+- Portas e janelas
 - Instalacoes hidraulicas
 - Instalacoes eletricas
 - Revestimentos internos
