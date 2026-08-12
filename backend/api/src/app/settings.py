@@ -13,12 +13,14 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     ROOT_PATH_BACKEND: str = ""
+    LOG_LEVEL: str = "INFO"
 
     OPENAI_API_KEY: str | None = None
-    OPENAI_MODEL: str = "gpt-5.5"
-    LLM_TEMPERATURE: float = 0.3
-    LLM_REQUEST_TIMEOUT_SECONDS: int = 120
-    LLM_MAX_RETRIES: int = 2
+    OPENAI_MODEL: str = "gpt-4.1"
+    LLM_TEMPERATURE: float = 0.2
+    LLM_REASONING_EFFORT: str = "low"
+    LLM_REQUEST_TIMEOUT_SECONDS: int = 300
+    LLM_MAX_RETRIES: int = 3
 
     IFC_STORAGE_DIR: Path = Path("/data/ifc")
 

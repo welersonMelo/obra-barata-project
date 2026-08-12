@@ -1,6 +1,7 @@
 """IFC upload and analysis endpoints."""
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from openai import APITimeoutError
 
 from app.models.ifc import AnalyzeIfcRequest, IfcUploadResponse
 from app.models.materials import ListaMateriaisObra
@@ -58,4 +59,12 @@ async def analisar_ifc(
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=str(exc),
+        ) from exc
+    except APITimeoutError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            detail=(
+                "A analise por IA demorou mais que o limite configurado. "
+                "Tente novamente ou aumente LLM_REQUEST_TIMEOUT_SECONDS."
+            ),
         ) from exc

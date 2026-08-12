@@ -1,5 +1,7 @@
 """FastAPI application entrypoint."""
 
+import logging
+
 from fastapi import FastAPI
 
 from app.controllers.ifc_controller import router as ifc_router
@@ -7,6 +9,12 @@ from app.settings import get_settings
 
 
 settings = get_settings()
+log_level = getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO)
+logging.basicConfig(
+    level=log_level,
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+)
+logging.getLogger("app").setLevel(log_level)
 
 app = FastAPI(
     title="Obra Barata API",
