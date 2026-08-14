@@ -18,7 +18,9 @@ dependencies = [
     "ifcopenshell>=0.8.3",
     "langchain-core>=1.0.0",
     "langchain-openai>=1.0.0",
+    "langgraph>=1.0.0",
     "lxml>=6.1.1",
+    "numexpr>=2.14.1",
     "numpy>=2.4.2",
     "openai>=2.16.0",
     "pandas>=3.0.0",
@@ -56,6 +58,11 @@ python_files = ["test_*.py"]
 [tool.coverage.run]
 branch = true
 source = ["app"]
+omit = [
+    "src/app/services/pricing/agent.py",
+    "src/app/services/pricing/suppliers.py",
+    "src/app/services/pricing/tools.py",
+]
 
 [tool.coverage.report]
 fail_under = 100

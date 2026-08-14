@@ -21,6 +21,9 @@ class Settings(BaseSettings):
     LLM_REASONING_EFFORT: str = "low"
     LLM_REQUEST_TIMEOUT_SECONDS: int = 300
     LLM_MAX_RETRIES: int = 3
+    SUPPLIER_SEARCH_TIMEOUT_SECONDS: int = 20
+    SUPPLIER_SEARCH_RESULTS_PER_PROVIDER: int = 5
+    SERPER_API_KEY: str | None = None
 
     IFC_STORAGE_DIR: Path = Path("/data/ifc")
 
@@ -35,6 +38,12 @@ class Settings(BaseSettings):
         """Return the OpenAI API key accepting the notebook's lowercase name too."""
 
         return self.OPENAI_API_KEY or os.getenv("openai_api_key")
+
+    @property
+    def serper_api_key(self) -> str | None:
+        """Return the Serper API key accepting the notebook's lowercase name too."""
+
+        return self.SERPER_API_KEY or os.getenv("serper_api_key")
 
 
 @lru_cache

@@ -42,3 +42,12 @@ def test_build_openai_chat_model_keeps_reasoning_effort_for_reasoning_models(
     chat_model = llm_client.build_openai_chat_model()
 
     assert chat_model.kwargs["reasoning_effort"] == "low"
+
+
+def test_settings_reads_lowercase_serper_api_key(monkeypatch):
+    from app.settings import Settings
+
+    monkeypatch.delenv("SERPER_API_KEY", raising=False)
+    monkeypatch.setenv("serper_api_key", "serper-test-key")
+
+    assert Settings().serper_api_key == "serper-test-key"

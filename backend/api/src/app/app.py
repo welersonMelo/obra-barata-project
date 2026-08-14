@@ -5,6 +5,7 @@ import logging
 from fastapi import FastAPI
 
 from app.controllers.ifc_controller import router as ifc_router
+from app.controllers.pricing_controller import router as pricing_router
 from app.settings import get_settings
 
 
@@ -21,6 +22,7 @@ app = FastAPI(
     root_path=settings.ROOT_PATH_BACKEND,
 )
 app.include_router(ifc_router)
+app.include_router(pricing_router)
 
 
 @app.get("/health", tags=["health"])
