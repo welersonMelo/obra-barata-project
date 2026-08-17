@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="_ds/industry-215cd6d5-c731-48ce-b702-9a931be6e99e/styles.css">
+<script src="_ds/industry-215cd6d5-c731-48ce-b702-9a931be6e99e/_ds_bundle.js"></script>
+<style>
+  html,body{margin:0;height:100%}
+  ::-webkit-scrollbar{width:11px;height:11px}
+  ::-webkit-scrollbar-thumb{background:var(--color-neutral-300);border:3px solid var(--color-bg)}
+  .ob-tab{position:relative;padding:6px 2px;font-family:var(--font-heading);font-weight:600;font-size:15px;cursor:pointer;color:color-mix(in srgb,var(--color-text) 55%,transparent)}
+  .ob-tab:hover{color:var(--color-text)}
+  .ob-tab.on{color:var(--color-text)}
+  .ob-tab.on::after{content:"";position:absolute;left:0;right:0;bottom:-13px;height:2px;background:var(--color-accent)}
+</style>
+</helmet>
+<div style="display:flex;flex-direction:column;height:100vh;background:var(--color-bg);color:var(--color-text)">
+
+  <!-- ══ HEADER ══ -->
+  <header style="flex:none;display:flex;align-items:center;gap:var(--space-6);padding:var(--space-3) var(--space-6);border-bottom:1px solid var(--color-divider);background:var(--color-bg)">
+    <div style="display:flex;align-items:center;gap:var(--space-3);cursor:pointer" onClick="{{ goProjects }}">
+      <div style="width:26px;height:26px;border:1px solid var(--color-text);display:grid;place-items:center;font-family:var(--font-heading);font-weight:600;font-size:15px">OB</div>
+      <span style="font-family:var(--font-heading);font-weight:600;font-size:19px;letter-spacing:-0.01em">Obra Barata</span>
+    </div>
+
+    <sc-if value="{{ inProject }}" hint-placeholder-val="{{ true }}">
+      <div style="display:flex;align-items:center;gap:var(--space-6);flex:1">
+        <div style="width:1px;height:24px;background:var(--color-divider)"></div>
+        <div style="display:flex;flex-direction:column;line-height:1.15">
+          <span style="font-size:10px;letter-spacing:0.09em;text-transform:uppercase;color:color-mix(in srgb,var(--color-text) 50%,transparent)">Projeto</span>
+          <span style="font-family:var(--font-heading);font-weight:600;font-size:15px">{{ activeName }}</span>
+        </div>
+        <nav style="display:flex;gap:var(--space-6);margin-left:var(--space-6)">
+          <sc-for list="{{ tabs }}" as="t" hint-placeholder-count="3">
+            <div class="{{ t.cls }}" onClick="{{ t.onClick }}">{{ t.label }}</div>
+          </sc-for>
+        </nav>
+        <button class="btn btn-ghost" style="margin-left:auto" onClick="{{ goProjects }}">← Todos os projetos</button>
+      </div>
+    </sc-if>
+  </header>
+
+  <div style="flex:1;overflow-y:auto">
+
+    <!-- ═════════ PROJECT PICKER ═════════ -->
+    <sc-if value="{{ isProjects }}" hint-placeholder-val="{{ true }}">
+      <div style="max-width:1120px;margin:0 auto;padding:var(--space-8) var(--space-6) var(--space-8)">
+        <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:var(--space-4);margin-bottom:var(--space-6)">
+          <div>
+            <div style="font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--color-accent);margin-bottom:var(--space-2)">Seus projetos</div>
+            <h1 style="margin:0;font-size:38px">Escolha uma obra</h1>
+            <p class="text-muted" style="margin:var(--space-2) 0 0;max-width:52ch;font-size:15px">Cada projeto guarda seu modelo Revit, as sugestões da IA e o planejamento de compras. Abra um para continuar de onde parou.</p>
+          </div>
+          <button class="btn btn-primary blueprint" onClick="{{ newProject }}"><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>Novo projeto
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
+          </button>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:var(--space-6)">
+          <sc-for list="{{ projects }}" as="p" hint-placeholder-count="3">
+            <div class="card blueprint elev-sm" style="cursor:pointer;padding:var(--space-4);gap:var(--space-3)" onClick="{{ p.onClick }}">
+              <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+              <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:var(--space-2)">
+                <span class="card-kicker">{{ p.tipo }}</span>
+                <span class="tag {{ p.tagClass }}">{{ p.status }}</span>
+              </div>
+              <div class="card-title" style="font-size:22px">{{ p.nome }}</div>
+              <div style="display:flex;gap:var(--space-8);margin-top:var(--space-1)">
+                <div><div style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:color-mix(in srgb,var(--color-text) 50%,transparent)">Área</div><div style="font-family:var(--font-heading);font-weight:600;font-size:18px">{{ p.area }}</div></div>
+                <div><div style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:color-mix(in srgb,var(--color-text) 50%,transparent)">Orçamento</div><div style="font-family:var(--font-heading);font-weight:600;font-size:18px">{{ p.valorStr }}</div></div>
+              </div>
+              <div class="card-meta" style="margin-top:var(--space-2);padding-top:var(--space-3);border-top:1px solid var(--color-divider)">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+                <span>Atualizado {{ p.updated }}</span>
+              </div>
+            </div>
+          </sc-for>
+
+          <div class="blueprint" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:var(--space-2);min-height:200px;cursor:pointer;color:color-mix(in srgb,var(--color-text) 60%,transparent)" onClick="{{ newProject }}">
+            <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+            <div style="width:40px;height:40px;border:1px solid var(--color-accent);display:grid;place-items:center;color:var(--color-accent)">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
+            </div>
+            <span style="font-family:var(--font-heading);font-weight:600;font-size:16px">Novo projeto</span>
+            <span style="font-size:12px">Enviar um modelo Revit</span>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ═════════ CONFIGURAÇÃO (setup: upload + revisão) ═════════ -->
+    <sc-if value="{{ isSetup }}" hint-placeholder-val="{{ true }}">
+      <div style="max-width:1080px;margin:0 auto;padding:var(--space-8) var(--space-6)">
+        <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:var(--space-4);margin-bottom:var(--space-6);flex-wrap:wrap">
+          <div>
+            <div style="font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--color-accent);margin-bottom:var(--space-2)">Configuração do projeto · etapa única</div>
+            <h1 style="margin:0;font-size:32px">Modelo Revit & revisão da IA</h1>
+            <p class="text-muted" style="margin:var(--space-2) 0 0;max-width:60ch;font-size:14px">Esta etapa acontece uma vez por obra. Depois de revisada, os materiais alimentam as seções de compras e resumo.</p>
+          </div>
+          <div style="display:inline-flex;border:1px solid var(--color-divider)">
+            <div onClick="{{ setUpload }}" style="{{ segUpload }}">Upload & Projeto</div>
+            <div onClick="{{ setReview }}" style="{{ segReview }}">Revisão da IA</div>
+          </div>
+        </div>
+
+        <!-- Upload sub-view -->
+        <sc-if value="{{ isUpload }}" hint-placeholder-val="{{ true }}">
+          <div style="display:flex;flex-direction:column;gap:var(--space-6)">
+            <div style="display:grid;grid-template-columns:1.1fr 1fr;gap:var(--space-6);align-items:start">
+              <div class="card blueprint" style="padding:var(--space-4);gap:var(--space-4)">
+                <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+                <div style="display:flex;align-items:center;gap:var(--space-4);padding:var(--space-4);border:1px solid var(--color-divider);background:var(--color-surface)">
+                  <div style="flex:none;width:52px;height:52px;border:1px solid var(--color-accent);display:grid;place-items:center;font-family:var(--font-heading);font-weight:600;font-size:14px;color:var(--color-accent)">RVT</div>
+                  <div style="flex:1;min-width:0">
+                    <div style="font-family:var(--font-heading);font-weight:600;font-size:16px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Casa_Alphaville_v3.rvt</div>
+                    <div class="text-muted" style="font-size:12px">48,2 MB · Revit 2024 · enviado agora</div>
+                    <div style="margin-top:var(--space-2);height:5px;background:var(--color-neutral-200);overflow:hidden"><div style="height:100%;width:100%;background:var(--color-accent)"></div></div>
+                  </div>
+                  <span class="tag tag-accent" style="flex:none">✓ Lido</span>
+                </div>
+                <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:var(--space-3)">
+                  <div class="blueprint" style="text-align:center;padding:var(--space-4) var(--space-2)"><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i><div style="font-family:var(--font-heading);font-weight:600;font-size:26px">148</div><div class="text-muted" style="font-size:11px">elementos lidos</div></div>
+                  <div class="blueprint" style="text-align:center;padding:var(--space-4) var(--space-2)"><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i><div style="font-family:var(--font-heading);font-weight:600;font-size:26px">96</div><div class="text-muted" style="font-size:11px">materiais quantificados</div></div>
+                  <div class="blueprint" style="text-align:center;padding:var(--space-4) var(--space-2);color:var(--color-accent-800);background:var(--color-accent-100)"><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i><div style="font-family:var(--font-heading);font-weight:600;font-size:26px">6</div><div style="font-size:11px">sugestões da IA</div></div>
+                </div>
+                <button class="btn btn-secondary blueprint" style="align-self:flex-start"><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>Substituir arquivo</button>
+              </div>
+
+              <div class="card blueprint" style="padding:var(--space-4);gap:var(--space-3)">
+                <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+                <h4 style="margin:0">Dados da obra</h4>
+                <div class="field"><label>Nome da obra</label><input class="input" value="Residência Alphaville"></div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-3)">
+                  <div class="field"><label>Tipo</label><input class="input" value="Casa em condomínio"></div>
+                  <div class="field"><label>Área construída</label><input class="input" value="214 m²"></div>
+                </div>
+                <div class="field"><label>Endereço</label><input class="input" value="Alphaville, Barueri – SP"></div>
+                <div class="field"><label>Padrão de acabamento</label>
+                  <div style="display:inline-flex;border:1px solid var(--color-divider);width:100%">
+                    <div style="flex:1;text-align:center;padding:8px;font-size:13px;cursor:pointer;font-family:var(--font-heading);font-weight:600;color:color-mix(in srgb,var(--color-text) 60%,transparent)">Baixo</div>
+                    <div style="flex:1;text-align:center;padding:8px;font-size:13px;cursor:pointer;font-family:var(--font-heading);font-weight:600;background:var(--color-accent);color:var(--color-bg);border-left:1px solid var(--color-divider);border-right:1px solid var(--color-divider)">Médio</div>
+                    <div style="flex:1;text-align:center;padding:8px;font-size:13px;cursor:pointer;font-family:var(--font-heading);font-weight:600;color:color-mix(in srgb,var(--color-text) 60%,transparent)">Alto</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:var(--space-4)">
+              <sc-for list="{{ pipeline }}" as="s" hint-placeholder-count="3">
+                <div class="card blueprint" style="padding:var(--space-4);gap:var(--space-2)">
+                  <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+                  <div style="width:28px;height:28px;border:1px solid var(--color-accent);display:grid;place-items:center;font-family:var(--font-heading);font-weight:600;font-size:13px;color:var(--color-accent)">{{ s.n }}</div>
+                  <div class="card-title" style="font-size:16px">{{ s.t }}</div>
+                  <p class="card-body" style="margin:0">{{ s.d }}</p>
+                </div>
+              </sc-for>
+            </div>
+
+            <div style="display:flex;justify-content:flex-end">
+              <button class="btn btn-primary blueprint" onClick="{{ setReview }}"><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>Revisar sugestões da IA
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+              </button>
+            </div>
+          </div>
+        </sc-if>
+
+        <!-- Review sub-view -->
+        <sc-if value="{{ isReview }}" hint-placeholder-val="{{ true }}">
+          <div style="display:flex;flex-direction:column;gap:var(--space-4)">
+            <div class="card blueprint" style="flex-direction:row;align-items:center;flex-wrap:wrap;gap:var(--space-3);padding:var(--space-4)">
+              <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+              <div style="font-size:14px">A IA sugeriu <b>{{ aiTotal }} itens</b> que normalmente não são modelados. Aceite, edite ou remova antes de gerar as compras.</div>
+              <div style="margin-left:auto;display:flex;gap:var(--space-2)">
+                <span class="tag tag-accent">{{ aiAccepted }} aceitos</span>
+                <span class="tag tag-outline">{{ aiPending }} pendentes</span>
+              </div>
+            </div>
+
+            <sc-for list="{{ aiItems }}" as="it" hint-placeholder-count="4">
+              <div class="card blueprint" style="{{ it.cardStyle }}">
+                <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+                <div style="display:flex;align-items:flex-start;gap:var(--space-4)">
+                  <div style="flex:1;min-width:0">
+                    <div style="display:flex;align-items:center;gap:var(--space-2);flex-wrap:wrap">
+                      <span class="card-title" style="font-size:18px">{{ it.nome }}</span>
+                      <span class="tag tag-neutral">{{ it.cat }}</span>
+                      <span class="tag {{ it.confTag }}">{{ it.confLabel }} · {{ it.conf }}%</span>
+                    </div>
+                    <div style="display:flex;gap:var(--space-8);margin-top:var(--space-2)">
+                      <div><div style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:color-mix(in srgb,var(--color-text) 50%,transparent)">Quantidade</div><div style="font-family:var(--font-heading);font-weight:600;font-size:15px">{{ it.qty }}</div></div>
+                      <div><div style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:color-mix(in srgb,var(--color-text) 50%,transparent)">Origem</div><div style="font-family:var(--font-heading);font-weight:600;font-size:15px">{{ it.origem }}</div></div>
+                    </div>
+                    <div style="margin-top:var(--space-3);padding:var(--space-3);border-left:2px solid var(--color-accent);background:var(--color-accent-100)">
+                      <span style="font-size:10px;letter-spacing:0.06em;text-transform:uppercase;color:var(--color-accent-800);font-family:var(--font-heading);font-weight:600">Por que foi sugerido</span>
+                      <div style="font-size:13px;color:var(--color-accent-900);margin-top:2px">{{ it.motivo }}</div>
+                    </div>
+                  </div>
+                  <div style="flex:none;display:flex;flex-direction:column;gap:var(--space-2);width:130px">
+                    <button class="{{ it.acceptCls }}" onClick="{{ it.onAccept }}">{{ it.acceptLabel }}</button>
+                    <button class="btn btn-secondary" style="justify-content:flex-start">Editar</button>
+                    <button class="btn btn-ghost" style="justify-content:flex-start;color:var(--color-neutral-700)" onClick="{{ it.onRemove }}">Remover</button>
+                  </div>
+                </div>
+              </div>
+            </sc-for>
+
+            <div style="display:flex;justify-content:flex-end">
+              <button class="btn btn-primary blueprint" onClick="{{ goCompras }}"><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>Ir para Compras & Preços
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+              </button>
+            </div>
+          </div>
+        </sc-if>
+      </div>
+    </sc-if>
+
+    <!-- ═════════ COMPRAS & PREÇOS ═════════ -->
+    <sc-if value="{{ isCompras }}" hint-placeholder-val="{{ true }}">
+      <div style="max-width:1220px;margin:0 auto;padding:var(--space-8) var(--space-6);display:grid;grid-template-columns:230px 1fr;gap:var(--space-8);align-items:start">
+        <div style="position:sticky;top:0">
+          <div style="font-size:10px;letter-spacing:0.09em;text-transform:uppercase;color:color-mix(in srgb,var(--color-text) 55%,transparent);margin-bottom:var(--space-3);padding-left:var(--space-2)">Categorias de compra</div>
+          <div style="display:flex;flex-direction:column">
+            <sc-for list="{{ categories }}" as="c" hint-placeholder-count="8">
+              <div style="{{ c.rowStyle }}" onClick="{{ c.onClick }}">
+                <span style="{{ c.dotStyle }}"></span>
+                <span style="flex:1;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--font-heading);font-weight:600;color:{{ c.color }}">{{ c.nome }}</span>
+                <span class="text-muted" style="font-size:12px">{{ c.itens }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:var(--space-6);min-width:0">
+          <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:var(--space-4);flex-wrap:wrap">
+            <div>
+              <div style="font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--color-accent);margin-bottom:var(--space-1)">Categoria · Alvenaria</div>
+              <h1 style="margin:0;font-size:30px">7 materiais</h1>
+              <p class="text-muted" style="margin:var(--space-1) 0 0;font-size:13px">Preços consultados hoje, {{ today }} · APIs oficiais + coleta automática</p>
+            </div>
+            <span class="tag tag-neutral" style="align-self:center">Cada material · um único fornecedor</span>
+          </div>
+
+          <sc-for list="{{ materials }}" as="m" hint-placeholder-count="3">
+            <div class="card blueprint" style="padding:var(--space-4);gap:var(--space-4)">
+              <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+              <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:var(--space-4);flex-wrap:wrap">
+                <div>
+                  <div class="card-title" style="font-size:18px">{{ m.nome }}</div>
+                  <div class="text-muted" style="font-size:13px;margin-top:2px">Quantidade estimada: <b style="color:var(--color-text)">{{ m.qty }}</b></div>
+                </div>
+                <div style="display:flex;align-items:center;gap:var(--space-2)">
+                  <span class="text-muted" style="font-size:11px">Perfil</span>
+                  <div style="display:inline-flex;border:1px solid var(--color-divider)">
+                    <sc-for list="{{ m.profilePills }}" as="pp" hint-placeholder-count="3">
+                      <div onClick="{{ pp.onClick }}" style="{{ pp.style }}">{{ pp.label }}</div>
+                    </sc-for>
+                  </div>
+                </div>
+              </div>
+
+              <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:var(--space-3)">
+                <sc-for list="{{ m.opts }}" as="o" hint-placeholder-count="3">
+                  <div onClick="{{ o.onClick }}" style="{{ o.cardStyle }}">
+                    <div style="display:flex;align-items:center;justify-content:space-between;gap:var(--space-2)">
+                      <span style="font-family:var(--font-heading);font-weight:600;font-size:14px">{{ o.forn }}</span>
+                      <span style="{{ o.dotStyle }}"></span>
+                    </div>
+                    <div class="text-muted" style="font-size:11.5px;margin-top:4px;min-height:32px">{{ o.desc }}</div>
+                    <div style="display:flex;align-items:baseline;gap:4px;margin-top:var(--space-2)">
+                      <span style="font-family:var(--font-heading);font-weight:600;font-size:19px">{{ o.precoStr }}</span>
+                      <span class="text-muted" style="font-size:11px">/ {{ o.un }}</span>
+                    </div>
+                    <div style="display:flex;align-items:center;justify-content:space-between;gap:var(--space-2);margin-top:var(--space-2);padding-top:var(--space-2);border-top:1px solid var(--color-divider)">
+                      <span style="font-size:11px;color:{{ o.dispColor }}">{{ o.disp }}</span>
+                      <span style="font-size:12px;font-family:var(--font-heading);font-weight:600">{{ o.totalStr }}</span>
+                    </div>
+                  </div>
+                </sc-for>
+              </div>
+
+              <div style="display:flex;align-items:center;gap:var(--space-4);padding-top:var(--space-3);border-top:1px solid var(--color-divider);flex-wrap:wrap">
+                <span style="font-size:13px;color:color-mix(in srgb,var(--color-text) 75%,transparent)">Selecionado: <b style="color:var(--color-text)">{{ m.selForn }}</b> · {{ m.selTotal }}</span>
+                <div style="margin-left:auto;display:flex;gap:var(--space-4)">
+                  <span class="btn btn-ghost" style="font-size:12px">Editar fornecedor</span>
+                  <span class="btn btn-ghost" style="font-size:12px">Editar preço</span>
+                  <span class="btn btn-ghost" style="font-size:12px">Editar quantidade</span>
+                </div>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ═════════ RESUMO FINANCEIRO ═════════ -->
+    <sc-if value="{{ isSummary }}" hint-placeholder-val="{{ true }}">
+      <div style="max-width:1080px;margin:0 auto;padding:var(--space-8) var(--space-6);display:flex;flex-direction:column;gap:var(--space-6)">
+        <div>
+          <div style="font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--color-accent);margin-bottom:var(--space-1)">Resumo financeiro</div>
+          <h1 style="margin:0;font-size:32px">{{ activeName }}</h1>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:var(--space-4)">
+          <div style="padding:var(--space-6);background:var(--color-accent-900);color:var(--color-bg)">
+            <div style="font-size:11px;letter-spacing:0.04em;opacity:0.75">Total à vista</div>
+            <div style="font-family:var(--font-heading);font-weight:600;font-size:34px;margin-top:var(--space-2)">{{ totalAvistaStr }}</div>
+            <div style="font-size:12px;opacity:0.7;margin-top:var(--space-1)">pagando tudo à vista</div>
+          </div>
+          <div class="card blueprint" style="padding:var(--space-6)">
+            <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+            <div class="text-muted" style="font-size:11px">Total a prazo</div>
+            <div style="font-family:var(--font-heading);font-weight:600;font-size:34px;margin-top:var(--space-2)">{{ totalAprazoStr }}</div>
+            <div class="text-muted" style="font-size:12px;margin-top:var(--space-1)">parcelado nos fornecedores</div>
+          </div>
+          <div class="blueprint" style="padding:var(--space-6);background:var(--color-accent-100);color:var(--color-accent-800)">
+            <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+            <div style="font-size:11px">Economia à vista</div>
+            <div style="font-family:var(--font-heading);font-weight:600;font-size:34px;margin-top:var(--space-2);color:var(--color-accent-900)">{{ economiaStr }}</div>
+            <div style="font-size:12px;margin-top:var(--space-1)">{{ economiaPct }}% mais barato</div>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:var(--space-4)">
+          <sc-for list="{{ kpis }}" as="k" hint-placeholder-count="3">
+            <div class="card blueprint" style="flex-direction:row;align-items:center;gap:var(--space-4);padding:var(--space-4)">
+              <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+              <div style="font-family:var(--font-heading);font-weight:600;font-size:30px;color:var(--color-accent)">{{ k.v }}</div>
+              <div class="text-muted" style="font-size:13px">{{ k.l }}</div>
+            </div>
+          </sc-for>
+        </div>
+
+        <div class="card blueprint" style="padding:var(--space-6);gap:var(--space-4)">
+          <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:var(--space-4);flex-wrap:wrap">
+            <h4 style="margin:0">Custo por categoria</h4>
+            <div style="display:inline-flex;border:1px solid var(--color-divider)">
+              <div onClick="{{ setAvista }}" style="{{ payAvistaStyle }}">À vista</div>
+              <div onClick="{{ setAprazo }}" style="{{ payAprazoStyle }}">A prazo</div>
+            </div>
+          </div>
+          <table class="table">
+            <thead><tr><th>Categoria</th><th style="width:34%">Participação</th><th>Fornecedor</th><th style="text-align:right">Custo</th></tr></thead>
+            <tbody>
+              <sc-for list="{{ sumRows }}" as="r" hint-placeholder-count="8">
+                <tr>
+                  <td><div style="font-family:var(--font-heading);font-weight:600;font-size:14px">{{ r.cat }}</div><div class="text-muted" style="font-size:11px">{{ r.itens }} itens</div></td>
+                  <td><div style="height:8px;background:var(--color-neutral-200)"><div style="height:100%;width:{{ r.barW }};background:var(--color-accent)"></div></div></td>
+                  <td class="text-muted">{{ r.forn }}</td>
+                  <td style="text-align:right;font-family:var(--font-heading);font-weight:600">{{ r.valStr }}</td>
+                </tr>
+              </sc-for>
+            </tbody>
+          </table>
+          <div style="display:flex;justify-content:space-between;align-items:center;padding-top:var(--space-2)">
+            <span style="font-family:var(--font-heading);font-weight:600;font-size:16px">Total {{ payLabel }}</span>
+            <span style="font-family:var(--font-heading);font-weight:600;font-size:22px;color:var(--color-accent)">{{ payTotalStr }}</span>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:var(--space-3);flex-wrap:wrap">
+          <button class="btn btn-primary blueprint"><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>Exportar lista por fornecedor</button>
+          <button class="btn btn-secondary blueprint"><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>Gerar PDF do orçamento</button>
+        </div>
+        <p class="text-muted" style="margin:0;font-size:12px;text-align:center">A Obra Barata sugere fornecedores e preços. A compra é feita por você, direto na loja física ou online.</p>
+      </div>
+    </sc-if>
+
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = {
+    screen: 'projects',   // projects | setup | compras | resumo
+    active: null,
+    setupTab: 'upload',   // upload | review
+    payment: 'avista',
+    ai: [
+      {id:'a1', nome:'Argamassa colante AC-III', cat:'Pisos e revestimentos', qty:'42 sacos · 20 kg', conf:93, origem:'Inferência IA', motivo:'98 m² de porcelanato externo identificados no modelo. A norma indica AC-III para áreas externas e peças grandes.', status:'pending'},
+      {id:'a2', nome:'Rejunte epóxi', cat:'Pisos e revestimentos', qty:'18 kg', conf:81, origem:'Inferência IA', motivo:'Banheiros e área de serviço são áreas molhadas — exigem rejunte impermeável, que não estava no modelo.', status:'pending'},
+      {id:'a3', nome:'Manta asfáltica 3 mm', cat:'Impermeabilização', qty:'65 m²', conf:88, origem:'Inferência IA', motivo:'Laje de cobertura e box dos banheiros não possuem camada de impermeabilização modelada.', status:'pending'},
+      {id:'a4', nome:'Perdas de material (corte e quebra)', cat:'Materiais complementares', qty:'≈ 6% do total', conf:72, origem:'Estimativa IA', motivo:'Percentual médio de perdas para obras residenciais aplicado sobre cerâmicas, blocos e tubulações.', status:'pending'},
+      {id:'a5', nome:'Parafusos, buchas e fixadores', cat:'Ferragens e fixadores', qty:'1 kit consolidado', conf:66, origem:'Estimativa IA', motivo:'Itens de fixação raramente são modelados no Revit. Estimados a partir da metragem de drywall e esquadrias.', status:'pending'},
+      {id:'a6', nome:'Aditivo impermeabilizante para argamassa', cat:'Impermeabilização', qty:'24 L', conf:58, origem:'Estimativa IA', motivo:'Sugerido para baldrame e áreas de respingo. Confiança baixa — revise se a obra realmente exige.', status:'pending'},
+    ],
+    profiles: {m1:'medio', m2:'medio', m3:'baixo'},
+    selected: {m1:0, m2:1, m3:0},
+  };
+
+  brl(n, d=0){
+    const neg=n<0; n=Math.abs(n); let intPart, dec='';
+    if(d>0){ const parts=n.toFixed(d).split('.'); intPart=parts[0]; dec=','+parts[1]; }
+    else intPart=String(Math.round(n));
+    intPart=intPart.replace(/\B(?=(\d{3})+(?!\d))/g,'.');
+    return (neg?'-':'')+'R$ '+intPart+dec;
+  }
+  setStatus(id, st){ this.setState(s=>({ai:s.ai.map(x=>x.id===id?{...x,status:st}:x)})); }
+  select(mid,i){ this.setState(s=>({selected:{...s.selected,[mid]:i}})); }
+  setProfile(mid,p){ this.setState(s=>({profiles:{...s.profiles,[mid]:p}})); }
+
+  projectDefs(){
+    return [
+      {id:'alpha', nome:'Residência Alphaville', tipo:'Casa em condomínio', area:'214 m²', status:'Pesquisa de preços', tagClass:'tag-accent', valor:82400, updated:'hoje', ready:true, land:'compras'},
+      {id:'vita', nome:'Clínica Vita', tipo:'Reforma comercial', area:'180 m²', status:'Orçamento concluído', tagClass:'tag-neutral', valor:64150, updated:'2 dias', ready:true, land:'resumo'},
+      {id:'nexus', nome:'Escritório Nexus', tipo:'Obra comercial', area:'320 m²', status:'Aguardando revisão IA', tagClass:'tag-outline', valor:0, updated:'5 dias', ready:false, land:'setup'},
+    ];
+  }
+
+  matData(){
+    return [
+      {id:'m1', nome:'Bloco cerâmico de vedação 9×19×19', qty:'2.400 un', qn:2400, opts:[
+        {forn:'Obramax', desc:'Bloco cerâmico vedação 9×19×19 – 8 furos', un:'un', preco:1.29, disp:'Em estoque', ok:true},
+        {forn:'Leroy Merlin', desc:'Bloco cerâmico 8 furos 9×19×19', un:'un', preco:1.45, disp:'Em estoque', ok:true},
+        {forn:'C&C', desc:'Bloco cerâmico vedação 9×19×19', un:'un', preco:1.38, disp:'Sob consulta', ok:false},
+      ]},
+      {id:'m2', nome:'Cimento CP-II-32', qty:'85 sacos · 50 kg', qn:85, opts:[
+        {forn:'Obramax', desc:'Cimento CP-II-E-32 50 kg', un:'sc', preco:28.90, disp:'Em estoque', ok:true},
+        {forn:'Balaroti', desc:'Cimento CP-II-E-32 50 kg', un:'sc', preco:27.50, disp:'Em estoque', ok:true},
+        {forn:'Cassol', desc:'Cimento CP-II-E-32 50 kg', un:'sc', preco:29.40, disp:'Em estoque', ok:true},
+      ]},
+      {id:'m3', nome:'Areia média lavada', qty:'14 m³', qn:14, opts:[
+        {forn:'Depósito Central', desc:'Areia média lavada a granel', un:'m³', preco:95.00, disp:'Entrega em 48h', ok:true},
+        {forn:'C&C', desc:'Areia média lavada a granel', un:'m³', preco:102.00, disp:'Sob consulta', ok:false},
+        {forn:'Obramax', desc:'Areia média ensacada 20 kg', un:'m³', preco:118.00, disp:'Em estoque', ok:true},
+      ]},
+    ];
+  }
+
+  renderVals(){
+    const brl=(n,d)=>this.brl(n,d);
+    const S=this.state;
+    const active=this.projectDefs().find(p=>p.id===S.active);
+    const inProject=S.screen!=='projects';
+
+    // tabs
+    const tabDefs=[['setup','Configuração'],['compras','Compras & Preços'],['resumo','Resumo Financeiro']];
+    const tabs=tabDefs.map(([id,label])=>({label,cls:'ob-tab'+(S.screen===id?' on':''),onClick:()=>this.setState({screen:id})}));
+
+    // projects
+    const projects=this.projectDefs().map(p=>({...p, valorStr:p.valor?brl(p.valor):'—',
+      onClick:()=>this.setState({active:p.id, screen:p.land, setupTab:'upload'})}));
+
+    // seg helper
+    const segStyle=(on)=>`flex:1;text-align:center;padding:7px 14px;font-size:13px;cursor:pointer;font-family:var(--font-heading);font-weight:600;`+(on?'background:var(--color-accent);color:var(--color-bg);':'color:color-mix(in srgb,var(--color-text) 60%,transparent);');
+    const segStyleB=(on)=>segStyle(on)+(on?'':'');
+
+    // review
+    const confTag=c=>c>=85?{tag:'tag-accent',label:'Alta confiança'}:c>=70?{tag:'tag-outline',label:'Confiança média'}:{tag:'tag-neutral',label:'Baixa confiança'};
+    const visible=S.ai.filter(x=>x.status!=='removed');
+    const aiItems=visible.map(x=>{
+      const m=confTag(x.conf); const acc=x.status==='accepted';
+      return {...x, confTag:m.tag, confLabel:m.label,
+        cardStyle:`padding:var(--space-4);gap:0;`+(acc?'border-color:var(--color-accent);box-shadow:inset 3px 0 0 var(--color-accent);':''),
+        acceptCls:acc?'btn btn-secondary':'btn btn-primary blueprint',
+        acceptLabel:acc?'✓ Aceito':'Aceitar',
+        onAccept:()=>this.setStatus(x.id, acc?'pending':'accepted'),
+        onRemove:()=>this.setStatus(x.id,'removed')};
+    });
+    const aiAccepted=visible.filter(x=>x.status==='accepted').length;
+
+    // research
+    const profLabels={baixo:'Baixo',medio:'Médio',alto:'Alto'};
+    const materials=this.matData().map(m=>{
+      const prof=S.profiles[m.id]||'medio', sel=S.selected[m.id]||0;
+      const profilePills=['baixo','medio','alto'].map(p=>({label:profLabels[p],onClick:()=>this.setProfile(m.id,p),
+        style:`padding:6px 11px;font-size:12px;cursor:pointer;font-family:var(--font-heading);font-weight:600;`+(p===prof?'background:var(--color-accent);color:var(--color-bg);':'color:color-mix(in srgb,var(--color-text) 60%,transparent);')+(p!=='baixo'?'border-left:1px solid var(--color-divider);':'')}));
+      const opts=m.opts.map((o,i)=>{
+        const on=i===sel;
+        return {...o, precoStr:brl(o.preco,2), totalStr:brl(m.qn*o.preco,0),
+          dotStyle:`width:12px;height:12px;border-radius:50%;border:1.5px solid `+(on?'var(--color-accent)':'var(--color-divider)')+(on?';background:var(--color-accent);box-shadow:inset 0 0 0 3px var(--color-bg)':''),
+          dispColor:o.ok?'var(--color-accent-700)':'color-mix(in srgb,var(--color-text) 45%,transparent)',
+          cardStyle:`cursor:pointer;padding:var(--space-3);border:1px solid `+(on?'var(--color-accent)':'var(--color-divider)')+`;background:`+(on?'var(--color-accent-100)':'var(--color-surface)'),
+          onClick:()=>this.select(m.id,i)};
+      });
+      const so=m.opts[sel];
+      return {...m, profilePills, opts, selForn:so.forn, selTotal:brl(m.qn*so.preco,0)};
+    });
+
+    const catDefs=[['Fundação',12,'done'],['Estrutura',9,'done'],['Alvenaria',7,'active'],['Cobertura',6,'todo'],['Inst. hidráulicas',15,'todo'],['Inst. elétricas',19,'todo'],['Revestimentos',22,'todo'],['Louças e metais',14,'todo'],['Pintura',8,'todo'],['Impermeabilização',5,'todo']];
+    const categories=catDefs.map(([nome,itens,st])=>({nome,itens,
+      onClick:()=>{},
+      rowStyle:`display:flex;align-items:center;gap:var(--space-2);padding:8px var(--space-2);cursor:pointer;`+(st==='active'?'background:var(--color-accent-100);':''),
+      dotStyle:`flex:none;width:7px;height:7px;border-radius:50%;background:`+(st==='done'?'var(--color-accent)':st==='active'?'var(--color-accent-900)':'var(--color-neutral-300)'),
+      color:st==='active'?'var(--color-accent-900)':st==='done'?'var(--color-text)':'color-mix(in srgb,var(--color-text) 55%,transparent)'}));
+
+    // summary
+    const sum=[
+      {cat:'Fundação',avista:8420,aprazo:8990,itens:12,forn:'Obramax'},
+      {cat:'Estrutura',avista:15230,aprazo:16180,itens:9,forn:'Gerdau'},
+      {cat:'Alvenaria',avista:9860,aprazo:10420,itens:7,forn:'Obramax'},
+      {cat:'Inst. hidráulicas',avista:6740,aprazo:7050,itens:15,forn:'Leroy Merlin'},
+      {cat:'Inst. elétricas',avista:7310,aprazo:7690,itens:19,forn:'Telhanorte'},
+      {cat:'Revestimentos',avista:18240,aprazo:19310,itens:22,forn:'Portobello'},
+      {cat:'Louças e metais',avista:11420,aprazo:12010,itens:14,forn:'Docol'},
+      {cat:'Pintura',avista:5180,aprazo:5460,itens:8,forn:'Suvinil'},
+    ];
+    const totalAvista=sum.reduce((a,r)=>a+r.avista,0);
+    const totalAprazo=sum.reduce((a,r)=>a+r.aprazo,0);
+    const economia=totalAprazo-totalAvista;
+    const key=S.payment==='avista'?'avista':'aprazo';
+    const maxV=Math.max(...sum.map(r=>r[key]));
+    const sumRows=sum.map(r=>({cat:r.cat,itens:r.itens,forn:r.forn,valStr:brl(r[key]),barW:Math.round(r[key]/maxV*100)+'%'}));
+    const fornSet=new Set(sum.map(r=>r.forn));
+    const payPill=(on)=>`padding:6px 15px;font-size:12.5px;cursor:pointer;font-family:var(--font-heading);font-weight:600;`+(on?'background:var(--color-accent);color:var(--color-bg);':'color:color-mix(in srgb,var(--color-text) 60%,transparent);')+(!on?'':'');
+
+    return {
+      inProject, isProjects:S.screen==='projects', isSetup:S.screen==='setup',
+      isCompras:S.screen==='compras', isSummary:S.screen==='resumo',
+      isUpload:S.setupTab==='upload', isReview:S.setupTab==='review',
+      goProjects:()=>this.setState({screen:'projects'}),
+      newProject:()=>this.setState({active:'nexus', screen:'setup', setupTab:'upload'}),
+      goCompras:()=>this.setState({screen:'compras'}),
+      setUpload:()=>this.setState({setupTab:'upload'}),
+      setReview:()=>this.setState({setupTab:'review'}),
+      segUpload:segStyle(S.setupTab==='upload'), segReview:segStyleB(S.setupTab==='review'),
+      tabs, projects, activeName:active?active.nome:'—',
+      pipeline:[
+        {n:'1',t:'Ler o modelo Revit',d:'Extrai automaticamente os quantitativos dos elementos que já estão no projeto.'},
+        {n:'2',t:'Complementar com IA',d:'Sugere insumos não modelados: argamassas, fixadores, impermeabilizantes e perdas.'},
+        {n:'3',t:'Pesquisar preços',d:'Consulta seus fornecedores por APIs e coleta automática, respeitando o perfil de cada material.'},
+      ],
+      aiItems, aiTotal:S.ai.length, aiAccepted, aiPending:visible.length-aiAccepted,
+      categories, materials, today:'3 ago',
+      totalAvistaStr:brl(totalAvista), totalAprazoStr:brl(totalAprazo), economiaStr:brl(economia),
+      economiaPct:((economia/totalAprazo)*100).toFixed(1).replace('.',','),
+      kpis:[{v:'8',l:'categorias com itens de compra'},{v:'106',l:'materiais no orçamento'},{v:String(fornSet.size),l:'fornecedores selecionados'}],
+      sumRows,
+      setAvista:()=>this.setState({payment:'avista'}), setAprazo:()=>this.setState({payment:'aprazo'}),
+      payAvistaStyle:payPill(S.payment==='avista'), payAprazoStyle:payPill(S.payment==='aprazo'),
+      payLabel:S.payment==='avista'?'à vista':'a prazo', payTotalStr:brl(S.payment==='avista'?totalAvista:totalAprazo),
+    };
+  }
+}
+</script>
+</body>
+</html>

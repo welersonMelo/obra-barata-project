@@ -43,6 +43,16 @@ class FakeProvider:
         return []
 
 
+class RecordingProvider(FakeProvider):
+    def __init__(self, name):
+        super().__init__(name)
+        self.calls = []
+
+    async def search(self, *args, **kwargs):
+        self.calls.append({"args": args, "kwargs": kwargs})
+        return []
+
+
 def _lista_quantificada():
     return ListaMateriaisObra(
         areas=[
@@ -109,3 +119,32 @@ def test_supplier_search_service_uses_casa_only_for_relevant_materials():
         "Pisolar",
         "Comercial Alianca",
     ]
+
+
+def test_supplier_search_service_uses_prepared_search_text_for_providers():
+    pisolar = RecordingProvider("Pisolar")
+    comercial_alianca = RecordingProvider("Comercial Alianca")
+    service = SupplierSearchService(
+        casa_provider=RecordingProvider("Casa da Eletricidade"),
+        pisolar_provider=pisolar,
+        comercial_alianca_provider=comercial_alianca,
+        serper_provider=RecordingProvider("Serper"),
+    )
+
+    asyncio.run(
+        service.search_material(
+            "Pintura",
+            MaterialObra(
+                nome="Pintura interna (tinta acrilica)",
+                descricao="Tinta para paredes internas",
+                quantidade=3,
+                medida="lata 18 L",
+            ),
+            use_serper_fallback=False,
+        )
+    )
+
+    assert pisolar.calls[0]["kwargs"]["product_name"] == "tinta acrilica 18L"
+    assert pisolar.calls[0]["kwargs"]["unit"] == ""
+    assert pisolar.calls[0]["kwargs"]["quantity"] is None
+    assert comercial_alianca.calls[0]["kwargs"]["product_name"] == "tinta acrilica 18L"

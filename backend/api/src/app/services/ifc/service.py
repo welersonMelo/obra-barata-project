@@ -16,6 +16,22 @@ from app.services.ifc.progress import StageProgressLogger
 logger = logging.getLogger(__name__)
 
 
+def remove_zero_quantity_materials(
+    lista_materiais: ListaMateriaisObra,
+) -> ListaMateriaisObra:
+    """Remove materials with exact zero quantity from the IFC endpoint result."""
+
+    filtered_areas = []
+    for area in lista_materiais.areas:
+        filtered_materials = [
+            material
+            for material in area.materiais
+            if material.quantidade is None or material.quantidade != 0
+        ]
+        filtered_areas.append(area.model_copy(update={"materiais": filtered_materials}))
+    return lista_materiais.model_copy(update={"areas": filtered_areas})
+
+
 class IfcService:
     """Coordinate IFC storage, extraction, and material analysis."""
 
@@ -89,5 +105,6 @@ class IfcService:
             spatial_data=record.spatial_data,
             build_digest_result=record.digest,
         )
+        result = remove_zero_quantity_materials(result)
         progress.finish()
         return result

@@ -14,6 +14,7 @@ class Settings(BaseSettings):
 
     ROOT_PATH_BACKEND: str = ""
     LOG_LEVEL: str = "INFO"
+    PRICING_REQUEST_LOG_DIR: Path = Path("/logs/buscar_fornecedores")
 
     OPENAI_API_KEY: str | None = None
     OPENAI_MODEL: str = "gpt-4.1"
