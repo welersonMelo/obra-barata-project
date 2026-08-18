@@ -1,5 +1,6 @@
 """FastAPI application entrypoint."""
 
+from contextlib import asynccontextmanager
 import logging
 
 from fastapi import FastAPI
@@ -19,20 +20,22 @@ logging.basicConfig(
 )
 logging.getLogger("app").setLevel(log_level)
 
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    """Prepare runtime dependencies."""
+
+    initialize_database()
+    yield
+
 app = FastAPI(
     title="Obra Barata API",
     root_path=settings.ROOT_PATH_BACKEND,
+    lifespan=lifespan,
 )
 app.include_router(project_router)
 app.include_router(ifc_router)
 app.include_router(pricing_router)
-
-
-@app.on_event("startup")
-def startup() -> None:
-    """Prepare runtime dependencies."""
-
-    initialize_database()
 
 
 @app.get("/health", tags=["health"])

@@ -1,6 +1,7 @@
 import pytest
 
 from app.database import password_hash
+from app.models.ifc import IfcUploadResponse
 from app.models.projects import LoginRequest, ProjectCreate, ProjectResponse, ProjectUpdate
 from app.services.projects.service import InvalidCredentialsError, ProjectService
 
@@ -100,3 +101,63 @@ def test_project_methods_use_test_user():
         "project-1",
         {"status": "analisado"},
     )
+
+
+def test_update_project_serializes_upload_with_public_schema_alias():
+    repository = FakeProjectRepository()
+    service = ProjectService(repository=repository)
+    upload = IfcUploadResponse(
+        ifc_id="ifc-1",
+        filename="obra.ifc",
+        schema="IFC4",
+        pavimentos=[],
+        areas={},
+        materiais=[],
+        camadas_material=[],
+    )
+
+    service.update_project("project-1", ProjectUpdate(upload=upload))
+
+    assert repository.calls[-1] == (
+        "update_project",
+        TEST_USER_ID,
+        "project-1",
+        {
+            "upload": {
+                "ifc_id": "ifc-1",
+                "filename": "obra.ifc",
+                "schema": "IFC4",
+                "pavimentos": [],
+                "areas": {},
+                "materiais": [],
+                "camadas_material": [],
+            },
+        },
+    )
+
+
+def test_project_response_accepts_previous_upload_schema_name_shape():
+    project = ProjectResponse(
+        id="project-1",
+        name="Casa",
+        type="Residencial",
+        address="Centro",
+        areaBuilt="120 m2",
+        finishProfile="Medio custo",
+        status="rascunho",
+        createdAt="2026-08-17T00:00:00",
+        updatedAt="2026-08-17T00:00:00",
+        upload={
+            "ifc_id": "ifc-1",
+            "filename": "obra.ifc",
+            "schema_name": "IFC4",
+            "pavimentos": [],
+            "areas": {},
+            "materiais": [],
+            "camadas_material": [],
+        },
+    )
+
+    assert project.upload is not None
+    assert project.upload.schema_name == "IFC4"
+    assert project.model_dump(mode="json", by_alias=True)["upload"]["schema"] == "IFC4"

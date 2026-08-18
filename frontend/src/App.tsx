@@ -26,7 +26,7 @@ import type {
   SetupTab,
   User,
 } from "./types";
-import { filterRemovedMaterials, updateMaterialOffer } from "./utils/materials";
+import { filterRemovedMaterials, updateMaterialOffer, updateMaterialQuantity } from "./utils/materials";
 
 function messageFromError(error: unknown): string {
   return error instanceof Error ? error.message : "Nao foi possivel concluir a operacao.";
@@ -153,10 +153,11 @@ export default function App() {
   async function handleAnalyzeIfc() {
     if (!activeProject?.upload) return;
     const projectSnapshot = activeProject;
+    const upload = activeProject.upload;
     setBusy("Analisando modelo IFC");
     setError(null);
     try {
-      const materialList = await analyzeIfc(projectSnapshot.upload.ifc_id);
+      const materialList = await analyzeIfc(upload.ifc_id);
       await persistProjectUpdate(projectSnapshot.id, {
         materialList: withProjectDefaults(materialList, projectSnapshot),
         pricedList: null,
@@ -174,11 +175,12 @@ export default function App() {
   async function handleFetchPrices() {
     if (!activeProject?.materialList) return;
     const projectSnapshot = activeProject;
+    const materialList = activeProject.materialList;
     setBusy("Buscando fornecedores e precos");
     setError(null);
     try {
       const sourceList = withProjectDefaults(
-        filterRemovedMaterials(projectSnapshot.materialList, projectSnapshot.removedMaterialIds),
+        filterRemovedMaterials(materialList, projectSnapshot.removedMaterialIds),
         projectSnapshot,
       );
       const pricedList = await fetchSupplierPrices(sourceList);
@@ -205,6 +207,24 @@ export default function App() {
       await persistProjectUpdate(activeProject.id, { removedMaterialIds });
     } catch (err) {
       setError(messageFromError(err));
+    }
+  }
+
+  async function updateReviewMaterialQuantity(id: string, quantity: number | null) {
+    if (!activeProject) return;
+    const sourceList = activeProject.materialList ?? activeProject.pricedList;
+    if (!sourceList) return;
+    const materialList = updateMaterialQuantity(sourceList, id, quantity);
+    setError(null);
+    try {
+      await persistProjectUpdate(activeProject.id, {
+        materialList,
+        pricedList: null,
+        status: "analisado",
+      });
+    } catch (err) {
+      setError(messageFromError(err));
+      throw err;
     }
   }
 
@@ -257,6 +277,7 @@ export default function App() {
           onUploadIfc={handleUploadIfc}
           onAnalyzeIfc={handleAnalyzeIfc}
           onToggleRemovedMaterial={toggleRemovedMaterial}
+          onUpdateMaterialQuantity={updateReviewMaterialQuantity}
         />
       ) : activeProject && screen === "compras" ? (
         <PricingView

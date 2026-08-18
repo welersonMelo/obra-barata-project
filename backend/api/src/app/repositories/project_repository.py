@@ -20,7 +20,7 @@ def _json_payload(value: Any) -> Jsonb | None:
     if value is None:
         return None
     if hasattr(value, "model_dump"):
-        value = value.model_dump(mode="json")
+        value = value.model_dump(mode="json", by_alias=True)
     return Jsonb(value)
 
 

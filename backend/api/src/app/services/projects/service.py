@@ -53,5 +53,5 @@ class ProjectService:
         return self.repository.update_project(
             user_id=self._test_user_id(),
             project_id=project_id,
-            updates=payload.model_dump(exclude_unset=True, mode="json"),
+            updates=payload.model_dump(exclude_unset=True, mode="json", by_alias=True),
         )

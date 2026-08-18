@@ -1,4 +1,4 @@
-import { ChangeEvent, useMemo, useState } from "react";
+import { ChangeEvent, KeyboardEvent, useEffect, useMemo, useState } from "react";
 import {
   Check,
   FileArchive,
@@ -11,11 +11,9 @@ import {
 
 import type { Project, SetupTab } from "../types";
 import {
-  activeMaterialList,
   filterRemovedMaterials,
   flattenMaterials,
   materialId,
-  materialQuantityText,
 } from "../utils/materials";
 
 interface SetupViewProps {
@@ -27,6 +25,7 @@ interface SetupViewProps {
   onUploadIfc: (file: File) => Promise<void>;
   onAnalyzeIfc: () => Promise<void>;
   onToggleRemovedMaterial: (materialId: string) => Promise<void>;
+  onUpdateMaterialQuantity: (materialId: string, quantity: number | null) => Promise<void>;
 }
 
 export function SetupView({
@@ -38,9 +37,10 @@ export function SetupView({
   onUploadIfc,
   onAnalyzeIfc,
   onToggleRemovedMaterial,
+  onUpdateMaterialQuantity,
 }: SetupViewProps) {
   const [file, setFile] = useState<File | null>(null);
-  const materialList = activeMaterialList(project);
+  const materialList = project.materialList ?? project.pricedList;
   const visibleList = useMemo(
     () => (materialList ? filterRemovedMaterials(materialList, project.removedMaterialIds) : null),
     [materialList, project.removedMaterialIds],
@@ -202,7 +202,15 @@ export function SetupView({
                   <dl className="inline-facts">
                     <div>
                       <dt>Quantidade</dt>
-                      <dd>{materialQuantityText(material)}</dd>
+                      <dd>
+                        <QuantityEditor
+                          materialId={id}
+                          quantity={material.quantidade}
+                          measure={material.medida}
+                          disabled={Boolean(busy) || removed}
+                          onSave={onUpdateMaterialQuantity}
+                        />
+                      </dd>
                     </div>
                     <div>
                       <dt>Perfil</dt>
@@ -236,6 +244,90 @@ function Metric({ label, value }: { label: string; value: number }) {
       <i className="corner br" />
       <strong>{value}</strong>
       <span>{label}</span>
+    </div>
+  );
+}
+
+function quantityDraft(value: number | null): string {
+  return value == null ? "" : String(value).replace(".", ",");
+}
+
+function parseQuantityDraft(value: string): { valid: true; quantity: number | null } | { valid: false } {
+  const trimmed = value.trim();
+  if (!trimmed) return { valid: true, quantity: null };
+
+  const normalized = trimmed.replace(",", ".");
+  const parsed = Number(normalized);
+  if (!Number.isFinite(parsed) || parsed < 0) return { valid: false };
+  return { valid: true, quantity: parsed };
+}
+
+function sameQuantity(left: number | null, right: number | null): boolean {
+  if (left == null || right == null) return left == null && right == null;
+  return Math.abs(left - right) < 0.000001;
+}
+
+function QuantityEditor({
+  materialId,
+  quantity,
+  measure,
+  disabled,
+  onSave,
+}: {
+  materialId: string;
+  quantity: number | null;
+  measure: string;
+  disabled: boolean;
+  onSave: (materialId: string, quantity: number | null) => Promise<void>;
+}) {
+  const [draft, setDraft] = useState(quantityDraft(quantity));
+  const [saving, setSaving] = useState(false);
+  const parsed = parseQuantityDraft(draft);
+  const parsedQuantity = parsed.valid ? parsed.quantity : null;
+  const unchanged = parsed.valid && sameQuantity(parsedQuantity, quantity);
+
+  useEffect(() => {
+    setDraft(quantityDraft(quantity));
+  }, [quantity]);
+
+  async function saveQuantity() {
+    if (!parsed.valid || unchanged || disabled || saving) return;
+    setSaving(true);
+    try {
+      await onSave(materialId, parsed.quantity);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function saveOnEnter(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      void saveQuantity();
+    }
+  }
+
+  return (
+    <div className="quantity-editor">
+      <input
+        className={`input quantity-input ${parsed.valid ? "" : "invalid"}`}
+        value={draft}
+        inputMode="decimal"
+        disabled={disabled || saving}
+        aria-label="Quantidade do material"
+        onChange={(event) => setDraft(event.target.value)}
+        onKeyDown={saveOnEnter}
+      />
+      <span>{measure || "-"}</span>
+      <button
+        className="btn btn-secondary quantity-save"
+        type="button"
+        disabled={disabled || saving || !parsed.valid || unchanged}
+        onClick={saveQuantity}
+      >
+        {saving ? <Loader2 size={15} className="spin" /> : <Check size={15} />}
+        Salvar
+      </button>
     </div>
   );
 }

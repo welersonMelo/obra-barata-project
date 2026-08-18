@@ -16,6 +16,8 @@ class AnalyzeIfcRequest(BaseModel):
 class IfcUploadResponse(BaseModel):
     """Information returned after a successful IFC upload."""
 
+    model_config = ConfigDict(populate_by_name=True)
+
     ifc_id: str
     filename: str
     schema_name: str = Field(alias="schema")

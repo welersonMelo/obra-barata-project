@@ -312,3 +312,21 @@ export function updateMaterialOffer(
     };
   });
 }
+
+export function updateMaterialQuantity(
+  list: ListaMateriaisObra,
+  targetMaterialId: string,
+  quantity: number | null,
+): ListaMateriaisObra {
+  return withAreaMaterials(list, (area) => ({
+    ...area,
+    materiais: area.materiais.map((material) =>
+      materialId(area.area, material) === targetMaterialId
+        ? {
+            ...material,
+            quantidade: quantity,
+          }
+        : material,
+    ),
+  }));
+}
