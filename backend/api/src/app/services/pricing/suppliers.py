@@ -165,6 +165,94 @@ def text_match_score(query: str, *texts: str | None) -> float:
     return max(token_score, sequence_score)
 
 
+UNIT_AND_PACKAGING_QUERY_TOKENS = {
+    "caixa",
+    "cx",
+    "fardo",
+    "g",
+    "kg",
+    "kilo",
+    "kilos",
+    "l",
+    "litro",
+    "litros",
+    "m",
+    "m2",
+    "m3",
+    "metro",
+    "metros",
+    "ml",
+    "pacote",
+    "rolo",
+    "saco",
+    "un",
+    "und",
+    "unidade",
+    "unidades",
+}
+
+PRODUCT_QUERY_STOPWORDS = {
+    "a",
+    "ao",
+    "aos",
+    "as",
+    "com",
+    "da",
+    "das",
+    "de",
+    "do",
+    "dos",
+    "e",
+    "em",
+    "na",
+    "nas",
+    "no",
+    "nos",
+    "o",
+    "os",
+    "para",
+    "por",
+    "sem",
+}
+
+
+def _meaningful_query_tokens(query: str | None) -> set[str]:
+    """Return query tokens that should appear in a product title."""
+
+    tokens = set(normalize_search_text(query).split())
+    return {
+        token
+        for token in tokens
+        if len(token) >= 3
+        and not any(char.isdigit() for char in token)
+        and token not in UNIT_AND_PACKAGING_QUERY_TOKENS
+        and token not in PRODUCT_QUERY_STOPWORDS
+    }
+
+
+def _tokens_match_flexibly(query_token: str, title_token: str) -> bool:
+    """Compare product tokens while tolerating short singular/plural variations."""
+
+    if query_token == title_token:
+        return True
+    shorter, longer = sorted([query_token, title_token], key=len)
+    return len(shorter) >= 5 and len(longer) - len(shorter) <= 2 and longer.startswith(shorter)
+
+
+def _title_matches_material_query(query: str, title: str | None) -> bool:
+    """Return whether a scraped title is related to the searched material."""
+
+    query_tokens = _meaningful_query_tokens(query)
+    if not query_tokens:
+        return True
+    title_tokens = set(normalize_search_text(title).split())
+    return any(
+        _tokens_match_flexibly(query_token, title_token)
+        for query_token in query_tokens
+        for title_token in title_tokens
+    )
+
+
 def _format_query_quantity(quantity: float | int | str | None) -> str:
     """Format quantity for storefront search terms."""
 
@@ -207,6 +295,9 @@ def _compact_unit_for_query(unit: str | None) -> str:
         "m2": "m2",
         "metro quadrado": "m2",
         "metros quadrados": "m2",
+        "m3": "m3",
+        "metro cubico": "m3",
+        "metros cubicos": "m3",
         "m": "m",
         "metro": "m",
         "metros": "m",
@@ -276,6 +367,204 @@ def build_supplier_search_queries(
             ]
         )
     )
+
+
+CONSTRUCTION_SEARCH_CONTEXT_PHRASES = (
+    "pintura interna",
+    "pintura externa",
+    "pintura de parede",
+    "pintura para parede",
+    "para paredes internas",
+    "para paredes externas",
+    "paredes internas",
+    "paredes externas",
+    "uso interno",
+    "uso externo",
+    "preenchimento de juntas",
+    "revestimento ceramico",
+    "revestimento ceramicos",
+    "revestimentos ceramicos",
+)
+
+CONSTRUCTION_SEARCH_CONTEXT_TOKENS = {
+    "acabamento",
+    "acabamentos",
+    "ambiente",
+    "ambientes",
+    "area",
+    "areas",
+    "ceramico",
+    "ceramicos",
+    "externa",
+    "externas",
+    "externo",
+    "externos",
+    "interna",
+    "internas",
+    "interno",
+    "internos",
+    "obra",
+    "obras",
+    "parede",
+    "paredes",
+    "para",
+    "pintura",
+    "preenchimento",
+    "revestimento",
+    "revestimentos",
+    "uso",
+}
+
+PRODUCT_IDENTITY_HINTS = {
+    "acrilica",
+    "acrilico",
+    "argamassa",
+    "cimento",
+    "concreto",
+    "dobradica",
+    "eletroduto",
+    "fio",
+    "rejunte",
+    "selador",
+    "tinta",
+    "tomada",
+}
+
+
+def _component_without_parentheses(text: str) -> str:
+    """Remove parenthetical details from a text component."""
+
+    return clean_scraped_text(re.sub(r"\([^)]*\)", " ", text or ""))
+
+
+def _parenthetical_components(text: str) -> list[str]:
+    """Return non-empty parenthetical components from text."""
+
+    return [
+        clean_scraped_text(match)
+        for match in re.findall(r"\(([^)]*)\)", text or "")
+        if clean_scraped_text(match)
+    ]
+
+
+def _has_product_identity_hint(text: str | None) -> bool:
+    normalized_tokens = set(normalize_search_text(text).split())
+    return any(
+        any(_tokens_match_flexibly(hint, token) for token in normalized_tokens)
+        for hint in PRODUCT_IDENTITY_HINTS
+    )
+
+
+def _clean_product_search_component(text: str | None) -> str:
+    """Remove obra/category context that tends to hurt storefront search."""
+
+    cleaned = clean_scraped_text(text)
+    if not cleaned:
+        return ""
+
+    for phrase in CONSTRUCTION_SEARCH_CONTEXT_PHRASES:
+        cleaned = re.sub(
+            rf"\b{re.escape(phrase)}\b",
+            " ",
+            cleaned,
+            flags=re.IGNORECASE,
+        )
+
+    meaningful_tokens = _meaningful_query_tokens(cleaned)
+    if meaningful_tokens and any(
+        _tokens_match_flexibly("tinta", token)
+        or _tokens_match_flexibly("rejunte", token)
+        or _tokens_match_flexibly("argamassa", token)
+        for token in meaningful_tokens
+    ):
+        words = []
+        for word in cleaned.split():
+            normalized_word = normalize_search_text(word)
+            if normalized_word in CONSTRUCTION_SEARCH_CONTEXT_TOKENS:
+                continue
+            words.append(word)
+        cleaned = " ".join(words)
+
+    cleaned = re.sub(r"\s*[-,/]\s*$", "", cleaned)
+    return clean_scraped_text(cleaned)
+
+
+def _select_product_search_base(nome: str, descricao: str = "") -> str:
+    """Choose the most product-like part of a material name/description."""
+
+    name = clean_scraped_text(nome)
+    description = clean_scraped_text(descricao)
+    parenthetical_parts = _parenthetical_components(name)
+    for part in parenthetical_parts:
+        if _has_product_identity_hint(part):
+            return _clean_product_search_component(part)
+
+    name_without_parentheses = _component_without_parentheses(name)
+    cleaned_name = _clean_product_search_component(name_without_parentheses)
+    if _has_product_identity_hint(cleaned_name):
+        return cleaned_name
+
+    cleaned_description = _clean_product_search_component(description)
+    if _has_product_identity_hint(cleaned_description):
+        return cleaned_description
+
+    return cleaned_name or cleaned_description or name
+
+
+def _format_package_amount(amount_text: str, suffix: str) -> str:
+    amount = amount_text.replace(",", ".")
+    try:
+        numeric_amount = float(amount)
+    except ValueError:
+        return f"{amount_text}{suffix}"
+    if numeric_amount.is_integer():
+        amount = str(int(numeric_amount))
+    else:
+        amount = str(numeric_amount).rstrip("0").rstrip(".").replace(".", ",")
+    return f"{amount}{suffix}"
+
+
+def _package_size_for_search(medida: str | None) -> str:
+    """Extract commercial package size from units like 'lata 18 L' or 'saco 1 kg'."""
+
+    if not medida:
+        return ""
+    normalized_measure = (medida or "").replace("\u00b2", "2")
+    package_patterns = [
+        (r"(\d+(?:[\.,]\d+)?)\s*(?:litros?|lts?|lt|l)\b", "L"),
+        (r"(\d+(?:[\.,]\d+)?)\s*(?:quilogramas?|kilos?|kg)\b", "kg"),
+        (r"(\d+(?:[\.,]\d+)?)\s*(?:gramas?|g)\b", "g"),
+        (r"(\d+(?:[\.,]\d+)?)\s*(?:mililitros?|ml)\b", "ml"),
+        (r"(\d+(?:[\.,]\d+)?)\s*(?:metros?\s*quadrados?|m2)\b", "m2"),
+        (r"(\d+(?:[\.,]\d+)?)\s*(?:metros?\s*cubicos?|m3)\b", "m3"),
+        (r"(\d+(?:[\.,]\d+)?)\s*(?:metros?|m)\b", "m"),
+        (r"(\d+(?:[\.,]\d+)?)\s*(?:unidades?|und|un)\b", "un"),
+    ]
+    for pattern, suffix in package_patterns:
+        match = re.search(pattern, normalized_measure, flags=re.IGNORECASE)
+        if match:
+            return _format_package_amount(match.group(1), suffix)
+    return ""
+
+
+def build_product_search_text(
+    nome: str,
+    descricao: str = "",
+    quantidade: float | int | None = None,
+    medida: str = "",
+    fornecedor: str = "",
+) -> str:
+    """Build one concise storefront search text for a material."""
+
+    base = _select_product_search_base(nome=nome, descricao=descricao)
+    package_size = _package_size_for_search(medida)
+    base_package_size = _package_size_for_search(base)
+    parts = [base]
+    if package_size and normalize_search_text(package_size) != normalize_search_text(
+        base_package_size
+    ):
+        parts.append(package_size)
+    return clean_scraped_text(" ".join(part for part in parts if part))
 
 
 def parse_brazilian_price(price_text: str | None) -> float | None:
@@ -354,6 +643,7 @@ def infer_commercial_unit(text: str | None, fallback_unit: str = "") -> str | No
         (r"(\d+(?:[\.,]\d+)?)\s*(?:quilogramas?|kilos?|kg)\b", "kg"),
         (r"(\d+(?:[\.,]\d+)?)\s*(?:gramas?|g)\b", "g"),
         (r"(\d+(?:[\.,]\d+)?)\s*(?:metros?\s*quadrados?|m2)\b", "m2"),
+        (r"(\d+(?:[\.,]\d+)?)\s*(?:metros?\s*cubicos?|m3)\b", "m3"),
         (r"(\d+(?:[\.,]\d+)?)\s*(?:metros?|m)\b", "m"),
         (r"(\d+(?:[\.,]\d+)?)\s*(?:unidades?|und|un)\b", "un"),
     ]
@@ -375,6 +665,7 @@ def _parse_amount_unit(unit_text: str | None) -> tuple[float | None, str | None]
 
     text = unit_text.casefold().replace(",", ".").replace("\u00b2", "2")
     patterns = [
+        (r"(\d+(?:\.\d+)?)\s*(?:m3|metros?\s+cubicos?)\b", "m3", 1),
         (r"(\d+(?:\.\d+)?)\s*(?:m2|metros?\s+quadrados?)\b", "m2", 1),
         (r"(\d+(?:\.\d+)?)\s*(?:ml|mililitros?)\b", "L", 0.001),
         (r"(\d+(?:\.\d+)?)\s*(?:litros?|lts?|lt|l)\b", "L", 1),
@@ -542,7 +833,7 @@ def _scrape_tray_datalayer_offers(
             fallback_unit=fallback_unit,
             default_installments=default_installments,
         )
-        if offer:
+        if offer and _title_matches_material_query(query, offer.descricao):
             offers.append(offer)
     return sorted(
         offers,
@@ -575,6 +866,8 @@ def _scrape_schema_org_product_offers(
         )
         title = clean_scraped_text(title_node.get_text(" ") if title_node else "")
         if len(title) < 8:
+            continue
+        if not _title_matches_material_query(query, title):
             continue
 
         meta_url = container.select_one('meta[itemprop="url"][content]')
@@ -644,6 +937,32 @@ def _scrape_schema_org_product_offers(
     return offers[:limit]
 
 
+MAX_PRODUCT_CONTAINER_TEXT_CHARS = 1600
+STOREFRONT_CHROME_ANCESTOR_CLASSES = (
+    "breadcrumb",
+    "categor",
+    "departament",
+    "filter",
+    "footer",
+    "header",
+    "menu",
+    "nav",
+    "sidebar",
+)
+
+
+def _is_storefront_chrome_node(node) -> bool:
+    """Return whether a node is likely navigation, filters, or layout chrome."""
+
+    node_name = (getattr(node, "name", "") or "").casefold()
+    if node_name in {"header", "footer", "nav", "aside"}:
+        return True
+    class_text = " ".join(getattr(node, "get", lambda *_: [])("class", [])).casefold()
+    node_id = str(getattr(node, "get", lambda *_: "")("id", "")).casefold()
+    haystack = f"{class_text} {node_id}"
+    return any(marker in haystack for marker in STOREFRONT_CHROME_ANCESTOR_CLASSES)
+
+
 def _candidate_container_text(anchor) -> str:
     """Climb from an anchor and return nearby text containing a price."""
 
@@ -652,8 +971,10 @@ def _candidate_container_text(anchor) -> str:
     for _level in range(5):
         if node is None:
             break
+        if node is not anchor and _is_storefront_chrome_node(node):
+            break
         text = clean_scraped_text(node.get_text(" "))
-        if "R$" in text:
+        if "R$" in text and len(text) <= MAX_PRODUCT_CONTAINER_TEXT_CHARS:
             return text
         node = getattr(node, "parent", None)
     return fallback_text
@@ -697,6 +1018,8 @@ def _scrape_storefront_search_offers(
 
         title = _title_from_candidate_text(anchor_text, container_text)
         if len(title) < 8:
+            continue
+        if not _title_matches_material_query(query, title):
             continue
         if normalize_search_text(title) in {"comprar", "adicionar ao carrinho", "produto"}:
             continue
@@ -834,6 +1157,8 @@ def _scrape_storefront_product_card_offers(
             lines=lines,
         )
         if not title or text_match_score(query, title) <= 0:
+            continue
+        if not _title_matches_material_query(query, title):
             continue
         if absolute_url in offers_by_url:
             continue
@@ -1416,12 +1741,18 @@ class SupplierSearchService:
             or material.perfil_produto
             or "Medio custo"
         )
+        search_text = build_product_search_text(
+            nome=material.nome,
+            descricao=material.descricao,
+            quantidade=material.quantidade,
+            medida=material.medida or "",
+        )
         providers = self.providers_for_material(area_name, material)
         search_tasks = [
             provider.search(
-                product_name=material.nome,
-                unit=material.medida or "",
-                quantity=material.quantidade,
+                product_name=search_text,
+                unit="",
+                quantity=None,
                 profile=str(profile),
                 limit=limit_per_provider,
             )
@@ -1451,9 +1782,9 @@ class SupplierSearchService:
         if use_serper_fallback and not has_priced_offer:
             try:
                 serper_offers = await self.serper_provider.search(
-                    product_name=material.nome,
-                    unit=material.medida or "",
-                    quantity=material.quantidade,
+                    product_name=search_text,
+                    unit="",
+                    quantity=None,
                     profile=str(profile),
                     limit=limit_per_provider,
                 )

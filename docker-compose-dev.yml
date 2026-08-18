@@ -16,19 +16,20 @@ services:
     networks:
       - shared_network
 
-  # frontend:
-  #   build:
-  #     context: frontend/.
-  #     dockerfile: Dockerfile
-  #   image: ${PROJECT_NAME}-${DEPLOY_ENV}-frontend-img
-  #   container_name: ${PROJECT_NAME}-${DEPLOY_ENV}-frontend
-  #   command: sh -c "npm run preview -- --port=3000 --host"
-  #   networks:
-  #     - shared_network
-  #   depends_on:
-  #     - backend
-  #   environment:
-  #     - NODE_ENV=production
+  frontend:
+    build:
+      context: frontend/.
+      dockerfile: Dockerfile
+    image: ${PROJECT_NAME}-${DEPLOY_ENV}-frontend-img
+    container_name: ${PROJECT_NAME}-${DEPLOY_ENV}-frontend
+    command: sh -c "npm run preview -- --port=3000 --host"
+    networks:
+      - shared_network
+    depends_on:
+      - backend
+    environment:
+      - NODE_ENV=production
+      - VITE_API_BASE_URL=/api
   
   nginx-proxy:
     build:
@@ -38,13 +39,13 @@ services:
     container_name: ${PROJECT_NAME}-${DEPLOY_ENV}-nginx
     depends_on:
       - backend
-      #- frontend
+      - frontend
     ports:
       - "80:80"      
     environment:
       - ROOT_PATH_BACKEND=${ROOT_PATH_BACKEND}    
       - NGINX_ENVSUBST_OUTPUT_DIR=/etc/nginx
-      #- FRONTEND_SERVICE=frontend
+      - FRONTEND_SERVICE=frontend
       - BACKEND_SERVICE=backend
     networks:
       - shared_network

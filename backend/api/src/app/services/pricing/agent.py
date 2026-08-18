@@ -25,6 +25,7 @@ from app.services.ifc.llm_client import build_openai_chat_model
 from app.services.pricing.suppliers import (
     _parse_amount_unit,
     _parse_unit_family,
+    build_product_search_text,
     normalize_search_text,
 )
 from app.services.pricing.tools import default_supplier_pricing_tools
@@ -48,8 +49,14 @@ Rules:
 - Use search_supplier_casa_eletricidade_tool, when available, only for electrical or adjacent materials: fios, cabos, disjuntores, quadros de distribuicao, caixas eletricas, interruptores, tomadas, iluminacao/LED, lampadas, chuveiros ou torneiras eletricas, sensores, transformadores, fita isolante, equipamentos de seguranca/comunicacao, ferramentas eletricas/manuais, instrumentos de medicao, hidraulica, irrigacao e jardinagem.
 - Do not call search_supplier_casa_eletricidade_tool for paint/coatings, floors, masonry, cement, sand, doors/windows, or general finishing unless the material is explicitly electrical or in an adjacent category above.
 - Prefer supplier-specific tools before Serper: Casa da Eletricidade for electrical/similar items; Pisolar and Comercial Alianca for broader construction/finishing items; Serper only when supplier-specific tools are unavailable or return no good offers.
+- Before supplier search, use prepare_product_search_text_tool to turn MaterialObra fields into one concise product query. Use the returned text as product_name in supplier tools and avoid duplicating quantity/medida there; for example, 'Pintura interna (tinta acrilica)' + medida 'lata 18 L' should be searched as 'tinta acrilica 18L'.
 - Use tools to make calculations, conversions, and percentage computations; do not calculate in your head, when possible.
-- Do not invent suppliers, prices, links, freight, installments, or availability.
+- Do not invent supplier quotes, product links, freight, installments, or availability.
+- Exception for no-results cases: if all relevant supplier/site search tools return no relevant priced offers, create exactly one estimated offer with fornecedor="Estimativa IA". Use your construction-pricing knowledge to suggest a reasonable average market price for budgeting, based on the material name, description, quantity, unit/measure, product profile, and common Brazilian construction-market units. This is not a supplier quote.
+- For an estimated offer, set link_produto=null, marca=null, frete=null, num_parcelas=1, disponibilidade="Estimativa de preco medio gerada por IA; cotacao real nao encontrada nos fornecedores consultados.", and data_consulta=today.
+- For an estimated offer, use material.medida as unidade. If material.quantidade is available, set offer.quantidade=material.quantidade, valor_unitario as the average price for one material.medida, and calculate valor_total/preco_a_vista/preco_a_prazo = quantidade * valor_unitario. If quantity is null, set quantidade=1, total fields equal to valor_unitario, and explain the uncertainty.
+- In justificativa, explicitly say which supplier tools did not return a usable price, why a site quote was not reliable for this item, the assumption behind the average unit price, and that the value must be reviewed with a real supplier before purchase.
+- Never include "Estimativa IA" when at least one relevant real supplier offer with price exists; real quotes are preferred over estimates.
 - Prefer offers that match product name, unit,and product profile.
 - When you recieve a list of offers, choose the best based on location, name match, unit match, and price.
 - Do not stop after the first supplier tool if another relevant supplier-specific search tool is available.
@@ -150,9 +157,10 @@ def _preview_for_log(value: Any, max_chars: int = 1200) -> str:
 
 
 def _log_reasoning_event(title: str, payload: Any | None = None) -> None:
-    print(f"\n[reasoning] {title}")
-    if payload is not None:
-        print(_preview_for_log(payload))
+    if payload is None:
+        logger.info("[reasoning] %s", title)
+    else:
+        logger.info("[reasoning] %s %s", title, _preview_for_log(payload))
 
 
 def _log_tool_calls(response) -> None:
@@ -173,7 +181,12 @@ def _log_tool_calls(response) -> None:
             if isinstance(tool_call, dict)
             else getattr(tool_call, "args", None)
         )
-        print(f"[reasoning][tool_call:{index}] {name} args={_preview_for_log(args)}")
+        logger.info(
+            "[reasoning][tool_call:%s] %s args=%s",
+            index,
+            name,
+            _preview_for_log(args),
+        )
 
 
 def build_supplier_reasoning_agent(
@@ -215,7 +228,7 @@ def build_supplier_reasoning_agent(
                 getattr(tool_message, "name", None)
                 or getattr(tool_message, "tool_call_id", "unknown")
             )
-            print(
+            logger.info(
                 f"[reasoning][tool_result:{index}] "
                 f"{tool_name}: {_preview_for_log(_message_text(tool_message))}"
             )
@@ -287,7 +300,7 @@ def _valid_offer_payloads(update_payload: dict) -> list[OfertaFornecedor]:
         try:
             offers.append(OfertaFornecedor.model_validate(raw_offer))
         except Exception as exc:
-            print(f"Skipping invalid supplier offer: {exc}")
+            logger.warning("Skipping invalid supplier offer: %s", exc)
     return offers
 
 
@@ -296,6 +309,29 @@ def _best_offer(offers: list[OfertaFornecedor]) -> OfertaFornecedor | None:
     if priced_offers:
         return min(priced_offers, key=_offer_rank_value)
     return offers[0] if offers else None
+
+
+def _is_ai_estimate_offer(offer: OfertaFornecedor) -> bool:
+    """Return whether an offer is the LLM-generated average-price fallback."""
+
+    supplier = normalize_search_text(offer.fornecedor)
+    return supplier == "estimativa ia" or supplier.startswith("estimativa ia ")
+
+
+def _discard_ai_estimates_when_real_priced_offers_exist(
+    offers: list[OfertaFornecedor],
+) -> list[OfertaFornecedor]:
+    """Keep LLM estimates only when no real priced supplier offer exists."""
+
+    real_priced_offers = [
+        offer
+        for offer in offers
+        if not _is_ai_estimate_offer(offer)
+        and _offer_rank_value(offer) < float("inf")
+    ]
+    if not real_priced_offers:
+        return offers
+    return [offer for offer in offers if not _is_ai_estimate_offer(offer)]
 
 
 def _offer_rank_value(offer: OfertaFornecedor) -> float:
@@ -590,10 +626,16 @@ def _invoke_supplier_tool_for_material(tool, material: MaterialObra) -> list[dic
         or material.perfil_produto
         or "Medio custo"
     )
+    search_text = build_product_search_text(
+        nome=material.nome,
+        descricao=material.descricao,
+        quantidade=material.quantidade,
+        medida=material.medida or "",
+    )
     args = {
-        "product_name": material.nome,
-        "unit": material.medida or "",
-        "quantity": material.quantidade,
+        "product_name": search_text,
+        "unit": "",
+        "quantity": None,
         "profile": profile,
     }
     if hasattr(tool, "invoke"):
@@ -645,6 +687,7 @@ def _apply_supplier_update(
         _enrich_offer_for_material(material, offer)
         for offer in _valid_offer_payloads(update_payload)
     ]
+    offers = _discard_ai_estimates_when_real_priced_offers_exist(offers)
     offers = _select_offer_options(offers, max_fornecedores_por_material)
     best_offer = _best_offer(offers)
     material_updates: dict[str, Any] = {}
@@ -781,10 +824,16 @@ def preencher_fornecedores_com_reasoning_agent(
                 f"supplier-reasoning-{area_index}-{material_index}-"
                 f"{hashlib.md5(material.nome.encode()).hexdigest()}"
             )
-            print(
-                f"\n[reasoning] Processing material {processed + 1}: "
-                f"area='{area.area}' nome='{material.nome}' medida='{material.medida}' "
-                f"quantidade={material.quantidade} perfil='{material.perfil_produto}'"
+            _log_reasoning_event(
+                "Processing material",
+                {
+                    "index": processed + 1,
+                    "area": area.area,
+                    "nome": material.nome,
+                    "medida": material.medida,
+                    "quantidade": material.quantidade,
+                    "perfil": material.perfil_produto,
+                },
             )
             update_payload = reason_about_material_suppliers(
                 agent=agent,

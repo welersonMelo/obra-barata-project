@@ -9,6 +9,7 @@ import math
 import re
 import threading
 from collections.abc import Awaitable, Callable
+from contextvars import copy_context
 from typing import Any
 
 from langchain_core.tools import tool
@@ -23,6 +24,7 @@ from app.services.pricing.suppliers import (
     TraySupplier,
     _parse_amount_unit,
     _parse_unit_family,
+    build_product_search_text,
 )
 
 
@@ -42,7 +44,8 @@ def _run_async_sync(factory: Callable[[], Awaitable[Any]]) -> Any:
         except BaseException as exc:
             result_box["error"] = exc
 
-    thread = threading.Thread(target=runner)
+    context = copy_context()
+    thread = threading.Thread(target=lambda: context.run(runner))
     thread.start()
     thread.join()
     if "error" in result_box:
@@ -54,6 +57,32 @@ def _offers_to_payload(offers: list[OfertaFornecedor]) -> list[dict]:
     """Serialize offers into tool-message-friendly dictionaries."""
 
     return [offer.model_dump(mode="json") for offer in offers]
+
+
+@tool
+def prepare_product_search_text_tool(
+    nome: str,
+    descricao: str = "",
+    quantidade: float | None = None,
+    medida: str = "",
+    fornecedor: str = "",
+) -> str:
+    """Return one concise product search text from MaterialObra fields.
+
+    Use antes das tools de fornecedores quando o nome tiver contexto de obra,
+    ambiente ou tarefa, por exemplo: nome='Pintura interna (tinta acrilica)',
+    descricao='Tinta para paredes internas', quantidade=3, medida='lata 18 L'
+    retorna 'tinta acrilica 18L'. O texto retornado deve ser usado como
+    product_name nas buscas; nao duplique quantidade/medida na chamada de busca.
+    """
+
+    return build_product_search_text(
+        nome=nome,
+        descricao=descricao,
+        quantidade=quantidade,
+        medida=medida,
+        fornecedor=fornecedor,
+    )
 
 
 @tool
@@ -164,11 +193,16 @@ def search_supplier_pisolar_tool(
     """
 
     provider = PisolarSupplier()
+    search_text = build_product_search_text(
+        nome=product_name,
+        quantidade=quantity,
+        medida=unit,
+    )
     offers = _run_async_sync(
         lambda: provider.search(
-            product_name=product_name,
-            unit=unit,
-            quantity=quantity,
+            product_name=search_text,
+            unit="",
+            quantity=None,
             profile=profile,
             limit=5,
         )
@@ -195,11 +229,17 @@ def search_supplier_comercial_alianca_tool(
         store_id=COMERCIAL_ALIANCA_STORE_ID,
         default_installments=10,
     )
+    search_text = build_product_search_text(
+        nome=product_name,
+        quantidade=quantity,
+        medida=unit,
+        fornecedor="Comercial Alianca",
+    )
     offers = _run_async_sync(
         lambda: provider.search(
-            product_name=product_name,
-            unit=unit,
-            quantity=quantity,
+            product_name=search_text,
+            unit="",
+            quantity=None,
             profile=profile,
             limit=5,
         )
@@ -230,11 +270,17 @@ def search_supplier_casa_eletricidade_tool(
         schema_first=True,
         product_card_fallback=True,
     )
+    search_text = build_product_search_text(
+        nome=product_name,
+        quantidade=quantity,
+        medida=unit,
+        fornecedor="Casa da Eletricidade",
+    )
     offers = _run_async_sync(
         lambda: provider.search(
-            product_name=product_name,
-            unit=unit,
-            quantity=quantity,
+            product_name=search_text,
+            unit="",
+            quantity=None,
             profile=profile,
             limit=5,
         )
@@ -256,13 +302,18 @@ def search_supplier_serp_tool(
     """
 
     provider = SerperSupplier()
+    search_text = build_product_search_text(
+        nome=product_name,
+        quantidade=quantity,
+        medida=unit,
+    )
     if city and not re.search(r"\b(aracaju|se)\b", city, flags=re.IGNORECASE):
         profile = f"{profile} {city}"
     offers = _run_async_sync(
         lambda: provider.search(
-            product_name=product_name,
-            unit=unit,
-            quantity=quantity,
+            product_name=search_text,
+            unit="",
+            quantity=None,
             profile=profile,
             limit=5,
         )
@@ -276,6 +327,7 @@ def default_supplier_pricing_tools(
     """Return the default tool list used by the supplier ReAct agent."""
 
     tools = [
+        prepare_product_search_text_tool,
         search_supplier_casa_eletricidade_tool,
         search_supplier_pisolar_tool,
         search_supplier_comercial_alianca_tool,

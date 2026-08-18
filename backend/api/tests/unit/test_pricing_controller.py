@@ -1,4 +1,7 @@
+import re
+
 import httpx
+import pytest
 from fastapi.testclient import TestClient
 from openai import APITimeoutError
 
@@ -6,6 +9,7 @@ from app.app import app
 from app.controllers.pricing_controller import get_pricing_service
 from app.models.materials import AreaMateriaisObra, ListaMateriaisObra, MaterialObra
 from app.services.ifc.llm_client import OpenAIConfigurationError
+from app.settings import get_settings
 
 
 class FakePricingService:
@@ -65,6 +69,13 @@ def _payload():
     ).model_dump(mode="json")
 
 
+@pytest.fixture(autouse=True)
+def pricing_request_log_dir(tmp_path, monkeypatch):
+    settings = get_settings()
+    monkeypatch.setattr(settings, "PRICING_REQUEST_LOG_DIR", tmp_path)
+    return tmp_path
+
+
 def test_buscar_fornecedores_returns_priced_material_list():
     fake_service = FakePricingService()
     app.dependency_overrides[get_pricing_service] = lambda: fake_service
@@ -85,6 +96,30 @@ def test_buscar_fornecedores_returns_priced_material_list():
             "use_serper_fallback": False,
         }
     ]
+
+
+def test_buscar_fornecedores_writes_timestamped_log_file(pricing_request_log_dir):
+    fake_service = FakePricingService()
+    app.dependency_overrides[get_pricing_service] = lambda: fake_service
+    try:
+        response = TestClient(app).post(
+            "/buscar_fornecedores?max_materials=2",
+            json=_payload(),
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    log_files = list(pricing_request_log_dir.glob("*.log"))
+    assert len(log_files) == 1
+    assert re.fullmatch(
+        r"\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}-\d{6}\.log",
+        log_files[0].name,
+    )
+    log_content = log_files[0].read_text(encoding="utf-8")
+    assert "buscar_fornecedores_request_started" in log_content
+    assert "buscar_fornecedores_request_finished" in log_content
+    assert "max_fornecedores_por_material=2" in log_content
 
 
 def test_buscar_fornecedores_returns_bad_request_for_service_value_error():
