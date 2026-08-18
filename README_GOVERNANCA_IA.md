@@ -2,165 +2,213 @@
 
 ## Objetivo
 
-Este documento descreve a arquitetura da solucao Obra Barata com foco no fluxo de dados e nos mecanismos de apoio a governanca de IA ja implementados. A descricao foi consolidada a partir da configuracao definida em `docker-compose-dev.yml` e dos componentes atualmente presentes no frontend e backend.
+Este documento registra a governanca de IA da solucao Obra Barata para a primeira versao do produto. Ele consolida a descricao funcional recebida para a aplicacao: uma plataforma web que transforma um arquivo Revit em um planejamento inteligente de compras para obras residenciais de pequeno e medio porte.
 
-## Visao Geral da Solucao
+A IA deve atuar como apoio ao levantamento e qualificacao de materiais, nao como decisora autonoma de compra. O usuario permanece responsavel por revisar, aceitar, editar ou remover as sugestoes antes da geracao do planejamento de compras.
 
-A solucao Obra Barata e uma aplicacao full stack containerizada para apoiar o cadastro e a qualificacao de startups a partir da leitura automatizada de seus sites institucionais. A plataforma combina coleta automatica de conteudo web, geracao assistida por modelo de linguagem, revisao humana e persistencia estruturada dos resultados.
+## Escopo da Primeira Versao
 
-Em termos funcionais, a solucao opera em quatro etapas principais:
+A primeira versao tem como objetivo reduzir drasticamente o tempo gasto para levantar materiais, pesquisar precos e montar um orcamento de compras confiavel.
 
-1. recepcao da URL e dos dados iniciais da startup no frontend;
-2. raspagem automatica do site e extracao de conteudo pelo backend;
-3. geracao de respostas por IA com base em questionario versionado;
-4. revisao humana e gravacao das respostas finais confirmadas.
+Fora do escopo inicial:
 
-Esse desenho estabelece um fluxo no qual a IA atua como mecanismo de apoio ao preenchimento, enquanto a confirmacao final permanece no processo de revisao da aplicacao.
+- substituir um ERP de construcao civil;
+- controlar toda a execucao da obra;
+- realizar compras automaticamente em nome do cliente;
+- dividir a compra de um mesmo material entre varios fornecedores.
 
-## Requisitos Funcionais
+A plataforma apenas sugere fornecedores, produtos, quantidades e precos. A compra continua sendo realizada pelo cliente diretamente na loja fisica ou online.
 
-- Interface web em React/Vite para iniciar a avaliacao, acompanhar o processamento e revisar respostas.
-- Backend Python com FastAPI/Uvicorn para orquestrar scraping, processamento de IA e persistencia dos resultados.
-- API exposta internamente na porta `8000`.
-- Frontend exposto internamente na porta `3000`.
-- Roteamento interno por Nginx, com backend publicado sob o prefixo `/api`.
-- Processamento assincrono de scraping por filas Redis/ARQ, com workers dedicados para coleta HTTP e coleta via navegador.
-- Integracao com Azure OpenAI por variaveis de ambiente para geracao de respostas com base no conteudo raspado.
-- Uso de questionario versionado para estruturar a geracao e a validacao das respostas.
-- Persistencia separada de respostas geradas pela IA e respostas finais confirmadas em arquivos CSV versionados.
-- Disponibilizacao de status de job e arquivos gerados pela API.
+## Papel da IA na Solucao
 
-## Requisitos Nao Funcionais
+O fluxo principal da aplicacao comeca pelo upload de um arquivo Revit. O modelo nao precisa estar completamente detalhado, pois a IA interpreta o projeto e complementa materiais, insumos e consumiveis que normalmente nao aparecem modelados.
 
-- Arquitetura containerizada em Docker Compose, com separacao entre frontend, backend, proxy, Redis e workers.
-- Processamento desacoplado da interface por meio de filas assincronas.
-- Cache e controle de concorrencia centralizados em Redis para reduzir retrabalho e organizar a raspagem por dominio.
-- Persistencia de dados operacionais em volumes montados para logs, arquivos CSV e dados do Redis.
-- Parametrizacao da operacao por variaveis de ambiente, incluindo filas, timeouts, limites e configuracao do modelo.
-- Escalabilidade horizontal por funcao, com possibilidade de ampliar API e workers conforme a carga.
+Exemplos de itens que podem ser inferidos:
 
-Para expansao de capacidade, as alternativas principais sao:
+- argamassas;
+- rejuntes;
+- impermeabilizantes;
+- fixadores;
+- parafusos;
+- perdas de materiais;
+- insumos de instalacao;
+- demais componentes necessarios para execucao da obra.
 
-- Aumentar os recursos computacionais do host Docker.
-- Separar servicos em multiplas maquinas ou ambientes dedicados.
-- Migrar a composicao para uma plataforma de orquestracao de containers.
+Toda inclusao automatica deve ser tratada como estimativa e nunca como verdade final. A governanca da aplicacao deve tornar essa diferenca visivel ao usuario.
 
-## Arquitetura da Solucao
+## Principios de Governanca
 
-### Base arquitetural
+### Transparencia
 
-A arquitetura da solucao em ambiente de desenvolvimento e definida pelo arquivo `docker-compose-dev.yml`, com os seguintes servicos:
+Todo item sugerido pela IA deve ser identificado como estimativa. A interface e os dados persistidos devem diferenciar claramente itens extraidos do modelo Revit de itens complementados automaticamente.
 
-- `frontend`
-- `backend`
-- `nginx-proxy`
-- `redis`
-- `worker-http`
-- `worker-browser`
+### Justificabilidade
 
-Todos os servicos compartilham a rede `shared_network`, enquanto os dados operacionais sao persistidos em volumes e diretorios montados.
+Cada sugestao da IA deve apresentar uma justificativa explicando por que o item foi sugerido. A justificativa deve ser compreensivel para o usuario final e relacionada ao contexto do projeto.
 
-## Componentes
+### Rastreabilidade
 
-### Frontend
+Cada item inferido deve registrar sua origem, como extracao direta do Revit, inferencia por IA, edicao manual do usuario ou pesquisa de fornecedor.
 
-O frontend, implementado em React com Vite, concentra a experiencia do usuario durante o cadastro. Ele recebe os dados iniciais, inicia o processamento de leitura do site, acompanha o job em execucao, apresenta as respostas geradas e permite a revisao final antes do envio definitivo.
+### Confianca explicita
 
-### Backend API
+Cada sugestao da IA deve apresentar um indicador de confianca. Esse indicador ajuda o usuario a priorizar revisoes e entender quais itens exigem maior cuidado.
 
-O backend, implementado com FastAPI, centraliza as regras da aplicacao. Ele normaliza URLs, consulta cache, cria jobs assincronos, fornece status de processamento, valida respostas finais e controla a persistencia dos artefatos produzidos.
+### Revisao humana
 
-### Nginx Proxy
+O usuario deve poder aceitar, editar ou remover qualquer sugestao antes da geracao do planejamento de compras. A versao final do planejamento deve refletir escolhas confirmadas pelo usuario.
 
-O Nginx atua como ponto unico de entrada HTTP da solucao. Ele encaminha o trafego para o frontend e para a API dentro da rede interna do ambiente Docker.
+### Controle manual
 
-### Redis
+Mesmo apos a pesquisa automatica de precos, o usuario deve poder alterar fornecedor, preco, descricao, quantidade, perfil do produto e condicoes de pagamento.
 
-O Redis exerce papel central na arquitetura. Ele sustenta as filas ARQ, armazena cache de conteudo e resultados, guarda status dos jobs, controla a concorrencia por dominio e fornece locks para gravacao segura dos CSVs.
+## Dados e Informacoes Tratadas
 
-### Worker HTTP
+A solucao trabalha com os seguintes grupos de dados:
 
-O `worker-http` executa a etapa inicial de raspagem web. Seu papel e realizar a coleta principal de paginas por meio da camada HTTP e preparar o conteudo para as etapas seguintes do fluxo.
+- dados do usuario e autenticacao;
+- dados basicos do projeto/obra;
+- arquivo Revit enviado;
+- elementos e quantitativos extraidos do modelo;
+- materiais e insumos inferidos por IA;
+- justificativas, origens e niveis de confianca;
+- fornecedores configurados pelo usuario;
+- resultados de pesquisa de precos;
+- escolhas finais de fornecedor e produto;
+- condicoes de pagamento a vista e a prazo;
+- resumo consolidado por categoria e fornecedor.
 
-### Worker Browser
+## Fluxo Governado de Dados
 
-O `worker-browser` executa a raspagem em navegador automatizado quando a coleta inicial nao produz conteudo suficiente. Esse componente amplia a cobertura para paginas que dependem de renderizacao em browser.
+1. O usuario cadastra ou acessa sua conta.
+2. O usuario cadastra um projeto com informacoes basicas da obra.
+3. O usuario envia um arquivo Revit.
+4. A aplicacao interpreta o modelo e extrai os quantitativos disponiveis.
+5. A IA identifica materiais e insumos ausentes que podem ser necessarios.
+6. Cada sugestao gerada pela IA recebe justificativa, origem e nivel de confianca.
+7. O usuario revisa as sugestoes e pode aceitar, editar ou remover itens.
+8. Os materiais consolidados sao organizados nas categorias de compra da obra.
+9. A aplicacao pesquisa precos nos fornecedores habilitados pelo usuario.
+10. O usuario escolhe ou ajusta fornecedores, precos, descricoes, quantidades e perfis.
+11. O usuario informa ou ajusta condicoes de pagamento a vista e a prazo.
+12. A aplicacao gera o resumo consolidado de custos e materiais por fornecedor.
 
-### Camada de LLM
+## Categorias de Compra
 
-A camada de geracao por IA recebe o conteudo raspado e o questionario correspondente, processando as perguntas por bloco e produzindo respostas estruturadas associadas a nivel de confianca.
+Os materiais devem ser organizados automaticamente nas seguintes categorias:
 
-### Arquivos CSV
+- Fundacao
+- Estrutura
+- Alvenaria
+- Cobertura
+- Esquadrias
+- Portas e janelas
+- Instalacoes hidraulicas
+- Instalacoes eletricas
+- Revestimentos internos
+- Revestimentos externos
+- Pisos e revestimentos ceramicos
+- Loucas e metais
+- Pintura
+- Gesso e forros
+- Vidros
+- Impermeabilizacao
+- Area externa e paisagismo
+- Ferragens e fixadores
+- Materiais complementares
 
-Os CSVs representam os artefatos persistidos da governanca operacional da solucao:
+Essa categorizacao facilita revisao, comparacao de custos e planejamento de compras por etapa da obra.
 
-- `llm_generated_answers_<version>.csv`: respostas geradas automaticamente;
-- `final_answers_<version>.csv`: respostas revisadas e confirmadas no fluxo final.
+## Pesquisa de Precos
 
-## Fluxo de Dados
+Para cada material consolidado, a plataforma deve realizar pesquisa automatica de precos usando fornecedores previamente configurados pelo usuario.
 
-O fluxo de dados da solucao ocorre da seguinte forma:
+A pesquisa pode ser hibrida:
 
-1. o usuario informa nome e URL da startup no frontend;
-2. o frontend envia a requisicao `POST /scrape` para o backend;
-3. o backend normaliza a URL e consulta o Redis para verificar conteudo ou resultado em cache;
-4. quando necessario, o backend cria um job e o encaminha para a fila de processamento;
-5. o `worker-http` realiza a coleta inicial do site;
-6. se o conteudo obtido ficar abaixo do limiar configurado, o processamento e escalado para o `worker-browser`;
-7. o conteudo capturado e armazenado no Redis para reutilizacao no job e em chamadas futuras;
-8. a cadeia de geracao por IA e iniciada por blocos do questionario;
-9. cada bloco produz respostas estruturadas com base no conteudo coletado;
-10. as respostas geradas pela IA sao persistidas em CSV proprio;
-11. o frontend consulta periodicamente o status do job e exibe o progresso ao usuario;
-12. as respostas sao apresentadas para revisao, ajuste e complementacao;
-13. o frontend envia as respostas finais para a API;
-14. o backend valida e grava as respostas confirmadas no CSV final.
+- APIs oficiais, quando disponiveis;
+- extracao automatica de dados;
+- web scraping;
+- integracoes equivalentes para fornecedores sem API publica.
 
-## Governanca de IA Materializada na Solucao
+Sempre que possivel, cada resultado deve conter fornecedor, descricao do produto, marca, unidade, quantidade, preco unitario, preco total, disponibilidade, data da consulta e link do produto.
 
-Os mecanismos de governanca de IA implementados na solucao aparecem diretamente no desenho funcional e arquitetural:
+## Perfil do Produto
 
-### Separacao entre sugestao automatica e resposta final
+Cada material possui um **Perfil do Produto**, que orienta a pesquisa conforme o padrao de acabamento desejado.
 
-A plataforma mantem arquivos distintos para as respostas produzidas pela IA e para as respostas efetivamente confirmadas no processo final.
+Perfis iniciais:
 
-### Revisao humana no fluxo
+- Baixo custo
+- Medio custo
+- Alto custo
 
-As respostas geradas sao exibidas ao usuario para conferencia e edicao antes da gravacao definitiva do cadastro.
+O perfil pode ser alterado individualmente por material ou aplicado a uma categoria inteira. Sempre que houver alteracao, a plataforma deve executar nova pesquisa de precos para refletir o padrao escolhido.
 
-### Versionamento do questionario
+## Regras de Compra e Decisao
 
-O questionario utilizado pela aplicacao possui versao associada, refletida no processamento e nos nomes dos arquivos de saida.
+Cada material deve ser comprado integralmente em apenas um fornecedor. A aplicacao nao deve dividir um mesmo item entre varios estabelecimentos, pois a regra de produto privilegia descontos por volume, simplificacao logistica e a pratica comum em obras residenciais.
 
-### Rastreabilidade de execucao
+A pesquisa automatica nao fecha pedidos nem substitui a decisao do cliente. O usuario pode editar:
 
-Os registros persistidos incluem identificadores de execucao, URL processada, identificacao da pergunta e data de geracao ou confirmacao.
+- fornecedor;
+- preco;
+- descricao;
+- quantidade;
+- perfil do produto;
+- pagamento a vista;
+- pagamento a prazo;
+- valor a vista;
+- valor a prazo;
+- percentual de desconto a vista.
 
-### Processamento por blocos
+## Saidas Consolidadas
 
-A organizacao por blocos permite acompanhar a execucao de forma granular e manter a estruturacao tematica do questionario no fluxo de IA.
+Ao final do fluxo, a aplicacao deve apresentar:
 
-### Indicacao de confianca nas respostas geradas
+- custo por categoria;
+- total geral a vista;
+- total geral a prazo;
+- economia obtida no pagamento a vista;
+- lista de materiais por fornecedor.
 
-As respostas produzidas automaticamente sao registradas com `confidence_level`, compondo a trilha de apoio a analise posterior.
+Essas saidas devem ser derivadas dos dados confirmados pelo usuario, mantendo separacao conceitual entre sugestoes automatizadas e decisoes finais.
 
-### Reaproveitamento controlado por cache
+## Requisitos Funcionais Relacionados a IA
 
-O uso de cache permite reutilizar artefatos previamente processados, mantendo consistencia operacional para URLs ja tratadas.
+### RF03 - Upload de arquivo Revit
 
-## Estrutura de Implantacao no Compose
+O arquivo Revit e a fonte principal das informacoes do projeto.
 
-No `docker-compose-dev.yml`, a solucao e organizada da seguinte forma:
+### RF04 - Leitura do projeto
 
-- `backend`: executa a API FastAPI na porta interna `8000`;
-- `frontend`: executa a aplicacao React em modo preview na porta interna `3000`;
-- `nginx-proxy`: publica a porta `80` e atua como gateway HTTP;
-- `redis`: fornece filas, cache e mecanismos de controle distribuidos;
-- `worker-http`: processa jobs de raspagem HTTP;
-- `worker-browser`: processa jobs de raspagem via navegador;
-- `redis_data`: volume nomeado para persistencia do Redis;
-- `./logs` e `./data`: diretorios montados para logs e dados operacionais.
+A aplicacao deve interpretar automaticamente os elementos presentes no modelo Revit e extrair os quantitativos disponiveis.
+
+### RF05 - Complementacao por Inteligencia Artificial
+
+A IA deve complementar automaticamente materiais e insumos ausentes no projeto sempre que identificar sua necessidade.
+
+### RF06 - Justificativa das inferencias
+
+Todo item criado pela IA deve apresentar justificativa, origem da informacao e nivel de confianca. O usuario pode aceitar, editar ou remover cada sugestao.
+
+### RF07 - Organizacao automatica das compras
+
+Os materiais devem ser agrupados automaticamente nas categorias de compra da obra.
+
+### RF08 - Configuracao de fornecedores
+
+O usuario pode cadastrar e habilitar os fornecedores usados durante as pesquisas de precos.
+
+## Controles Recomendados para Implementacao
+
+- Persistir separadamente itens extraidos do Revit, itens sugeridos pela IA e itens confirmados pelo usuario.
+- Registrar data e hora de cada inferencia e pesquisa de preco.
+- Guardar o fornecedor consultado e o metodo de consulta usado.
+- Exibir alerta visual para itens com baixa confianca.
+- Permitir historico de edicoes manuais relevantes.
+- Evitar que uma sugestao de IA seja promovida a item final sem revisao ou confirmacao do usuario.
+- Reexecutar a pesquisa de precos quando o perfil do produto, fornecedor ou quantidade for alterado.
 
 ## Conclusao
 
-A solucao Obra Barata implementa uma arquitetura distribuida e orientada a processamento assincrono para apoiar a qualificacao de startups com uso de IA. Seu fluxo combina captura automatizada de conteudo, geracao estruturada de respostas, acompanhamento por job e bloco, revisao humana e persistencia versionada dos resultados. A organizacao entre frontend, API, workers, Redis e arquivos de saida sustenta um modelo operacional em que a IA participa como apoio ao processo de avaliacao dentro de uma trilha rastreavel e estruturada.
+A governanca de IA do Obra Barata deve garantir que a automacao acelere o levantamento e a pesquisa de compras sem retirar o controle do usuario. A IA complementa o projeto, explica suas sugestoes e indica confianca; o usuario revisa, ajusta e confirma as decisoes que compoem o planejamento final.

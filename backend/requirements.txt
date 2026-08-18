@@ -1,0 +1,21 @@
+# ===== Web / API =====
+fastapi
+uvicorn[standard]
+pydantic
+ifcopenshell
+ 
+# ===== LangChain / LangGraph =====
+langchain-community
+langchain-core
+langchain-openai
+langgraph
+ 
+# ===== Banco de dados (SQLDatabase do langchain_community) =====
+SQLAlchemy
+ 
+# ===== Avaliação de expressões matemáticas =====
+numexpr
+ 
+# ===== Typing =====
+typing-extensions
+ 
