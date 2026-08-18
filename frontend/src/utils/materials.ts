@@ -21,6 +21,69 @@ export function numberText(value: number | null | undefined): string {
   return new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 2 }).format(value);
 }
 
+function normalizeMeasureText(value: string | null | undefined): string {
+  return (value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\u00b2/g, "2")
+    .replace(/,/g, ".")
+    .toLowerCase();
+}
+
+function hasPackageWord(measure: string | null | undefined): boolean {
+  return /\b(saco|sacos|lata|latas|caixa|caixas|cx|pacote|pacotes|rolo|rolos|fardo|fardos|galao|galoes|balde|baldes)\b/.test(
+    normalizeMeasureText(measure),
+  );
+}
+
+function parseAmountUnit(value: string | null | undefined): {
+  amount: number | null;
+  family: string | null;
+} {
+  const text = normalizeMeasureText(value);
+  const amountPatterns: Array<[RegExp, string]> = [
+    [/(\d+(?:\.\d+)?)\s*(?:metros?\s*quadrados?|m2)\b/, "m2"],
+    [/(\d+(?:\.\d+)?)\s*(?:metros?\s*cubicos?|m3)\b/, "m3"],
+    [/(\d+(?:\.\d+)?)\s*(?:mililitros?|ml)\b/, "ml"],
+    [/(\d+(?:\.\d+)?)\s*(?:litros?|lts?|lt|l)\b/, "l"],
+    [/(\d+(?:\.\d+)?)\s*(?:quilogramas?|quilos?|kilos?|kg)\b/, "kg"],
+    [/(\d+(?:\.\d+)?)\s*(?:gramas?|g)\b/, "g"],
+    [/(\d+(?:\.\d+)?)\s*(?:metros?|m)\b/, "m"],
+    [/(\d+(?:\.\d+)?)\s*(?:unidades?|und|un)\b/, "un"],
+  ];
+
+  for (const [pattern, family] of amountPatterns) {
+    const match = text.match(pattern);
+    if (match) return { amount: Number(match[1]), family };
+  }
+
+  const unitPatterns: Array<[RegExp, string]> = [
+    [/\b(?:metros?\s*quadrados?|m2)\b/, "m2"],
+    [/\b(?:metros?\s*cubicos?|m3)\b/, "m3"],
+    [/\b(?:mililitros?|ml)\b/, "ml"],
+    [/\b(?:litros?|lts?|lt|l)\b/, "l"],
+    [/\b(?:quilogramas?|quilos?|kilos?|kg)\b/, "kg"],
+    [/\b(?:gramas?|g)\b/, "g"],
+    [/\b(?:metros?|m)\b/, "m"],
+    [/\b(?:unidades?|und|un)\b/, "un"],
+  ];
+
+  for (const [pattern, family] of unitPatterns) {
+    if (pattern.test(text)) return { amount: 1, family };
+  }
+
+  return { amount: null, family: null };
+}
+
+function almostEqual(left: number | null, right: number | null): boolean {
+  if (left == null || right == null) return false;
+  return Math.abs(left - right) < 0.01;
+}
+
+function roundMoney(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
 export function statusLabel(status: ProjectStatus): string {
   const labels: Record<ProjectStatus, string> = {
     rascunho: "Rascunho",
@@ -96,7 +159,79 @@ export function bestOffer(material: MaterialObra): OfertaFornecedor | null {
   };
 }
 
+export function offerPurchaseQuantity(
+  material: MaterialObra,
+  offer: OfertaFornecedor,
+): number | null {
+  const materialQuantity = material.quantidade;
+  if (materialQuantity == null || materialQuantity <= 0) {
+    return offer.quantidade ?? null;
+  }
+
+  const materialUnit = parseAmountUnit(material.medida);
+  const offerUnit = parseAmountUnit(`${offer.unidade ?? ""} ${offer.descricao ?? ""}`);
+  const materialIsPackageQuantity = hasPackageWord(material.medida);
+
+  if (materialIsPackageQuantity) {
+    const hasCompatibleUnit =
+      !materialUnit.family ||
+      !offerUnit.family ||
+      materialUnit.family === offerUnit.family;
+    const hasCompatiblePackageSize =
+      materialUnit.amount == null ||
+      offerUnit.amount == null ||
+      almostEqual(materialUnit.amount, offerUnit.amount);
+
+    if (hasCompatibleUnit && hasCompatiblePackageSize) {
+      return materialQuantity;
+    }
+  }
+
+  if (
+    materialUnit.family &&
+    offerUnit.family &&
+    materialUnit.family === offerUnit.family &&
+    offerUnit.amount
+  ) {
+    return Math.ceil(materialQuantity / offerUnit.amount);
+  }
+
+  return offer.quantidade ?? (materialIsPackageQuantity ? materialQuantity : null);
+}
+
+function offerExplicitTotal(offer: OfertaFornecedor, mode: PaymentMode): number | null {
+  if (mode === "avista") return offer.preco_a_vista ?? offer.valor_total;
+  return offer.preco_a_prazo ?? offer.valor_total;
+}
+
+export function offerTotalForMaterial(
+  material: MaterialObra,
+  offer: OfertaFornecedor,
+  mode: PaymentMode = "avista",
+): number | null {
+  const explicitTotal = offerExplicitTotal(offer, mode);
+  const purchaseQuantity = offerPurchaseQuantity(material, offer);
+
+  if (offer.valor_unitario != null && purchaseQuantity != null && purchaseQuantity > 0) {
+    const computedTotal = roundMoney(offer.valor_unitario * purchaseQuantity);
+    if (explicitTotal == null) return computedTotal;
+    if (purchaseQuantity > 1 && almostEqual(explicitTotal, offer.valor_unitario)) {
+      return computedTotal;
+    }
+    if (purchaseQuantity > 1 && explicitTotal < offer.valor_unitario) {
+      return computedTotal;
+    }
+  }
+
+  return explicitTotal;
+}
+
 export function materialTotal(material: MaterialObra, mode: PaymentMode): number {
+  const selectedOffer = bestOffer(material);
+  if (selectedOffer) {
+    return offerTotalForMaterial(material, selectedOffer, mode) ?? 0;
+  }
+
   if (mode === "avista") {
     return material.preco_a_vista ?? material.valor_total ?? 0;
   }
@@ -161,13 +296,15 @@ export function updateMaterialOffer(
       ...area,
       materiais: area.materiais.map((material) => {
         if (material.nome !== materialName) return material;
+        const totalAvista = offerTotalForMaterial(material, offer, "avista");
+        const totalAprazo = offerTotalForMaterial(material, offer, "aprazo");
         return {
           ...material,
           fornecedor: offer.fornecedor,
           valor_unitario: offer.valor_unitario,
-          valor_total: offer.valor_total,
-          preco_a_vista: offer.preco_a_vista,
-          preco_a_prazo: offer.preco_a_prazo,
+          valor_total: totalAvista ?? totalAprazo ?? offer.valor_total,
+          preco_a_vista: totalAvista ?? offer.preco_a_vista,
+          preco_a_prazo: totalAprazo ?? offer.preco_a_prazo,
           num_parcelas: offer.num_parcelas,
           frete: offer.frete,
         };

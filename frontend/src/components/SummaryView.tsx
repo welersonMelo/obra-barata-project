@@ -7,6 +7,7 @@ import {
   filterRemovedMaterials,
   flattenMaterials,
   listTotal,
+  materialTotal,
   pricedAreaCount,
   supplierCount,
 } from "../utils/materials";
@@ -38,7 +39,7 @@ export function SummaryView({ project, paymentMode, onPaymentMode }: SummaryView
         material.fornecedor,
         material.quantidade ?? "",
         material.medida,
-        material.valor_total ?? material.preco_a_vista ?? "",
+        materialTotal(material, "avista") || "",
       ].join(";"),
     );
     const blob = new Blob([[header, ...lines].join("\n")], {

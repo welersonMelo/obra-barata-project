@@ -215,6 +215,12 @@ strong {
   color: white;
 }
 
+.btn-primary.blueprint {
+  border-color: var(--color-accent);
+  background: var(--color-accent);
+  color: white;
+}
+
 .btn-secondary {
   background: var(--color-surface);
 }
@@ -738,6 +744,7 @@ strong {
 }
 
 .material-head,
+.material-actions,
 .selected-offer,
 .offer-top,
 .offer-bottom {
@@ -750,6 +757,28 @@ strong {
 .material-head span {
   color: var(--color-muted);
   font-size: 13px;
+}
+
+.material-actions {
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.icon-button {
+  display: inline-grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border: 1px solid var(--color-divider);
+  border-radius: 6px;
+  background: var(--color-surface);
+  color: var(--color-accent-900);
+  cursor: pointer;
+}
+
+.icon-button:hover {
+  border-color: var(--color-accent);
+  background: var(--color-accent-100);
 }
 
 .offer-grid {
@@ -802,8 +831,9 @@ strong {
 
 .offer-price {
   display: flex;
-  align-items: baseline;
-  gap: var(--space-2);
+  align-items: flex-start;
+  flex-direction: column;
+  gap: var(--space-1);
   margin-top: auto;
 }
 
@@ -811,8 +841,25 @@ strong {
   font-size: 20px;
 }
 
-.offer-price small {
+.offer-price small,
+.offer-price em,
+.offer-total small {
   color: var(--color-muted);
+  font-size: 12px;
+  font-style: normal;
+}
+
+.offer-total {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-2) 0;
+  border-top: 1px solid var(--color-divider);
+}
+
+.offer-total strong {
+  font-size: 20px;
 }
 
 .offer-bottom {
@@ -918,6 +965,102 @@ strong {
   font-size: 18px;
 }
 
+.modal-backdrop {
+  position: fixed;
+  z-index: 50;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: var(--space-5);
+  background: rgba(32, 35, 31, 0.45);
+}
+
+.modal-panel {
+  width: min(760px, 100%);
+  max-height: min(820px, calc(100vh - 40px));
+  overflow-y: auto;
+  padding: var(--space-6);
+  border-radius: 6px;
+  box-shadow: 0 22px 70px rgba(32, 35, 31, 0.22);
+}
+
+.modal-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin-bottom: var(--space-5);
+}
+
+.modal-head h2 {
+  margin: 0;
+  font-size: 28px;
+}
+
+.memorial-summary {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--color-divider);
+}
+
+.memorial-summary strong {
+  font-size: 20px;
+}
+
+.memorial-summary span,
+.memorial-section p {
+  color: var(--color-muted);
+  line-height: 1.5;
+}
+
+.memorial-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+  margin: var(--space-5) 0;
+}
+
+.memorial-grid div {
+  min-width: 0;
+  padding: var(--space-3);
+  border: 1px solid var(--color-divider);
+  background: var(--color-bg);
+}
+
+.memorial-grid dd {
+  margin: var(--space-1) 0 0;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.memorial-section {
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-divider);
+}
+
+.memorial-section h3 {
+  margin: 0 0 var(--space-2);
+  font-size: 16px;
+}
+
+.reference-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.reference-list span {
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--color-divider);
+  border-radius: 999px;
+  background: var(--color-bg);
+  color: var(--color-accent-900);
+  font-size: 12px;
+  font-weight: 700;
+}
+
 @media (max-width: 980px) {
   .app-header,
   .project-header,
@@ -979,14 +1122,16 @@ strong {
   .material-review,
   .material-head,
   .selected-offer,
-  .review-summary {
+  .review-summary,
+  .modal-head {
     grid-template-columns: 1fr;
     align-items: stretch;
     flex-direction: column;
   }
 
   .details-list,
-  .inline-facts {
+  .inline-facts,
+  .memorial-grid {
     grid-template-columns: 1fr;
   }
 
