@@ -2,15 +2,18 @@ import { FormEvent, useState } from "react";
 import { Building2, LogIn } from "lucide-react";
 
 interface LoginViewProps {
-  onLogin: (name: string) => void;
+  busy: string | null;
+  error: string | null;
+  onLogin: (username: string, password: string) => Promise<void>;
 }
 
-export function LoginView({ onLogin }: LoginViewProps) {
-  const [name, setName] = useState("Usuário Obra Barata");
+export function LoginView({ busy, error, onLogin }: LoginViewProps) {
+  const [username, setUsername] = useState("teste");
+  const [password, setPassword] = useState("teste");
 
-  function submit(event: FormEvent) {
+  async function submit(event: FormEvent) {
     event.preventDefault();
-    onLogin(name.trim() || "Usuário Obra Barata");
+    await onLogin(username.trim(), password);
   }
 
   return (
@@ -28,17 +31,27 @@ export function LoginView({ onLogin }: LoginViewProps) {
           <h1>Obra Barata</h1>
         </div>
         <label className="field">
-          <span>Nome</span>
+          <span>Usuario</span>
           <input
             className="input"
-            value={name}
-            onChange={(event) => setName(event.target.value)}
+            value={username}
+            onChange={(event) => setUsername(event.target.value)}
             autoFocus
           />
         </label>
-        <button className="btn btn-primary full" type="submit">
+        <label className="field">
+          <span>Senha</span>
+          <input
+            className="input"
+            type="password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+          />
+        </label>
+        {error ? <div className="alert error">{error}</div> : null}
+        <button className="btn btn-primary full" type="submit" disabled={Boolean(busy)}>
           <LogIn size={16} />
-          Entrar
+          {busy ? busy : "Entrar"}
         </button>
       </form>
     </main>

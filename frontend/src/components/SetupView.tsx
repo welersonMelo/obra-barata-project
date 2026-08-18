@@ -26,7 +26,7 @@ interface SetupViewProps {
   onSetupTab: (tab: SetupTab) => void;
   onUploadIfc: (file: File) => Promise<void>;
   onAnalyzeIfc: () => Promise<void>;
-  onToggleRemovedMaterial: (materialId: string) => void;
+  onToggleRemovedMaterial: (materialId: string) => Promise<void>;
 }
 
 export function SetupView({

@@ -1,6 +1,14 @@
 import { useMemo, useState } from "react";
 
-import { analyzeIfc, fetchSupplierPrices, uploadIfc } from "./api/client";
+import {
+  analyzeIfc,
+  createProject as createProjectRequest,
+  fetchSupplierPrices,
+  listProjects,
+  login as loginRequest,
+  updateProject as updateProjectRequest,
+  uploadIfc,
+} from "./api/client";
 import { Header } from "./components/Header";
 import { LoginView } from "./components/LoginView";
 import { PricingView } from "./components/PricingView";
@@ -12,14 +20,16 @@ import type {
   OfertaFornecedor,
   PaymentMode,
   Project,
+  ProjectCreateInput,
+  ProjectUpdateInput,
   Screen,
   SetupTab,
+  User,
 } from "./types";
 import { filterRemovedMaterials, updateMaterialOffer } from "./utils/materials";
-import { createProject, touchProject } from "./utils/projects";
 
 function messageFromError(error: unknown): string {
-  return error instanceof Error ? error.message : "Não foi possível concluir a operação.";
+  return error instanceof Error ? error.message : "Nao foi possivel concluir a operacao.";
 }
 
 function withProjectDefaults(list: ListaMateriaisObra, project: Project): ListaMateriaisObra {
@@ -36,8 +46,14 @@ function withProjectDefaults(list: ListaMateriaisObra, project: Project): ListaM
   };
 }
 
+function nextScreenForProject(project: Project): Screen {
+  if (project.status === "precificado") return "resumo";
+  if (project.status === "rascunho") return "setup";
+  return "compras";
+}
+
 export default function App() {
-  const [user, setUser] = useState<string | null>(null);
+  const [user, setUser] = useState<User | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const [screen, setScreen] = useState<Screen>("projects");
@@ -51,26 +67,67 @@ export default function App() {
     [projects, activeProjectId],
   );
 
-  function replaceProject(projectId: string, updater: (project: Project) => Project) {
-    setProjects((current) =>
-      current.map((project) => (project.id === projectId ? updater(project) : project)),
-    );
+  function upsertProject(savedProject: Project) {
+    setProjects((current) => {
+      const exists = current.some((project) => project.id === savedProject.id);
+      if (exists) {
+        return current.map((project) => (project.id === savedProject.id ? savedProject : project));
+      }
+      return [savedProject, ...current];
+    });
   }
 
-  function createNewProject(data: Parameters<typeof createProject>[0]) {
-    const project = createProject(data);
-    setProjects((current) => [project, ...current]);
-    setActiveProjectId(project.id);
-    setScreen("setup");
-    setSetupTab("upload");
+  async function persistProjectUpdate(
+    projectId: string,
+    updates: ProjectUpdateInput,
+  ): Promise<Project> {
+    const savedProject = await updateProjectRequest(projectId, updates);
+    upsertProject(savedProject);
+    return savedProject;
+  }
+
+  async function handleLogin(username: string, password: string) {
+    setBusy("Entrando");
+    setError(null);
+    try {
+      const loggedUser = await loginRequest(username, password);
+      const savedProjects = await listProjects();
+      setUser(loggedUser);
+      setProjects(savedProjects);
+      setActiveProjectId(null);
+      setScreen("projects");
+      setSetupTab("upload");
+    } catch (err) {
+      setError(messageFromError(err));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function createNewProject(data: ProjectCreateInput) {
+    setBusy("Criando projeto");
+    setError(null);
+    try {
+      const project = await createProjectRequest(data);
+      upsertProject(project);
+      setActiveProjectId(project.id);
+      setScreen("setup");
+      setSetupTab("upload");
+    } catch (err) {
+      setError(messageFromError(err));
+      throw err;
+    } finally {
+      setBusy(null);
+    }
   }
 
   function openProject(projectId: string) {
     const project = projects.find((item) => item.id === projectId);
     if (!project) return;
     setActiveProjectId(projectId);
-    setScreen(project.status === "precificado" ? "resumo" : project.status === "rascunho" ? "setup" : "compras");
+    setScreen(nextScreenForProject(project));
     setSetupTab(project.materialList ? "review" : "upload");
+    setError(null);
   }
 
   async function handleUploadIfc(file: File) {
@@ -79,13 +136,13 @@ export default function App() {
     setError(null);
     try {
       const upload = await uploadIfc(file);
-      replaceProject(activeProject.id, (project) =>
-        touchProject(project, {
-          upload,
-          status: "ifc_enviado",
-          pricedList: null,
-        }),
-      );
+      await persistProjectUpdate(activeProject.id, {
+        upload,
+        status: "ifc_enviado",
+        materialList: null,
+        pricedList: null,
+        removedMaterialIds: [],
+      });
     } catch (err) {
       setError(messageFromError(err));
     } finally {
@@ -95,18 +152,17 @@ export default function App() {
 
   async function handleAnalyzeIfc() {
     if (!activeProject?.upload) return;
+    const projectSnapshot = activeProject;
     setBusy("Analisando modelo IFC");
     setError(null);
     try {
-      const materialList = await analyzeIfc(activeProject.upload.ifc_id);
-      replaceProject(activeProject.id, (project) =>
-        touchProject(project, {
-          materialList: withProjectDefaults(materialList, project),
-          pricedList: null,
-          status: "analisado",
-          removedMaterialIds: [],
-        }),
-      );
+      const materialList = await analyzeIfc(projectSnapshot.upload.ifc_id);
+      await persistProjectUpdate(projectSnapshot.id, {
+        materialList: withProjectDefaults(materialList, projectSnapshot),
+        pricedList: null,
+        status: "analisado",
+        removedMaterialIds: [],
+      });
       setSetupTab("review");
     } catch (err) {
       setError(messageFromError(err));
@@ -117,20 +173,19 @@ export default function App() {
 
   async function handleFetchPrices() {
     if (!activeProject?.materialList) return;
-    setBusy("Buscando fornecedores e preços");
+    const projectSnapshot = activeProject;
+    setBusy("Buscando fornecedores e precos");
     setError(null);
     try {
       const sourceList = withProjectDefaults(
-        filterRemovedMaterials(activeProject.materialList, activeProject.removedMaterialIds),
-        activeProject,
+        filterRemovedMaterials(projectSnapshot.materialList, projectSnapshot.removedMaterialIds),
+        projectSnapshot,
       );
       const pricedList = await fetchSupplierPrices(sourceList);
-      replaceProject(activeProject.id, (project) =>
-        touchProject(project, {
-          pricedList,
-          status: "precificado",
-        }),
-      );
+      await persistProjectUpdate(projectSnapshot.id, {
+        pricedList,
+        status: "precificado",
+      });
       setScreen("resumo");
     } catch (err) {
       setError(messageFromError(err));
@@ -139,31 +194,33 @@ export default function App() {
     }
   }
 
-  function toggleRemovedMaterial(id: string) {
+  async function toggleRemovedMaterial(id: string) {
     if (!activeProject) return;
-    replaceProject(activeProject.id, (project) => {
-      const exists = project.removedMaterialIds.includes(id);
-      return touchProject(project, {
-        removedMaterialIds: exists
-          ? project.removedMaterialIds.filter((item) => item !== id)
-          : [...project.removedMaterialIds, id],
-      });
-    });
+    const exists = activeProject.removedMaterialIds.includes(id);
+    const removedMaterialIds = exists
+      ? activeProject.removedMaterialIds.filter((item) => item !== id)
+      : [...activeProject.removedMaterialIds, id];
+    setError(null);
+    try {
+      await persistProjectUpdate(activeProject.id, { removedMaterialIds });
+    } catch (err) {
+      setError(messageFromError(err));
+    }
   }
 
-  function selectOffer(area: string, materialName: string, offer: OfertaFornecedor) {
+  async function selectOffer(area: string, materialName: string, offer: OfertaFornecedor) {
     if (!activeProject?.pricedList) return;
-    replaceProject(activeProject.id, (project) =>
-      touchProject(project, {
-        pricedList: project.pricedList
-          ? updateMaterialOffer(project.pricedList, area, materialName, offer)
-          : project.pricedList,
-      }),
-    );
+    const pricedList = updateMaterialOffer(activeProject.pricedList, area, materialName, offer);
+    setError(null);
+    try {
+      await persistProjectUpdate(activeProject.id, { pricedList });
+    } catch (err) {
+      setError(messageFromError(err));
+    }
   }
 
   if (!user) {
-    return <LoginView onLogin={setUser} />;
+    return <LoginView busy={busy} error={error} onLogin={handleLogin} />;
   }
 
   return (
@@ -178,11 +235,18 @@ export default function App() {
           setProjects([]);
           setActiveProjectId(null);
           setScreen("projects");
+          setError(null);
         }}
       />
 
       {screen === "projects" ? (
-        <ProjectsView projects={projects} onCreate={createNewProject} onOpen={openProject} />
+        <ProjectsView
+          projects={projects}
+          busy={busy}
+          error={error}
+          onCreate={createNewProject}
+          onOpen={openProject}
+        />
       ) : activeProject && screen === "setup" ? (
         <SetupView
           project={activeProject}

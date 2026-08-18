@@ -20,7 +20,7 @@ interface PricingViewProps {
   busy: string | null;
   error: string | null;
   onFetchPrices: () => Promise<void>;
-  onSelectOffer: (area: string, materialName: string, offer: OfertaFornecedor) => void;
+  onSelectOffer: (area: string, materialName: string, offer: OfertaFornecedor) => Promise<void>;
 }
 
 export function PricingView({

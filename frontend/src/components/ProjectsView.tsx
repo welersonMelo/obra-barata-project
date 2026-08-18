@@ -6,31 +6,39 @@ import { currency, listTotal, statusLabel } from "../utils/materials";
 
 interface ProjectsViewProps {
   projects: Project[];
+  busy: string | null;
+  error: string | null;
   onCreate: (data: {
     name: string;
     type: string;
     address: string;
     areaBuilt: string;
     finishProfile: PerfilProduto;
-  }) => void;
+  }) => Promise<void>;
   onOpen: (projectId: string) => void;
 }
 
-export function ProjectsView({ projects, onCreate, onOpen }: ProjectsViewProps) {
+export function ProjectsView({ projects, busy, error, onCreate, onOpen }: ProjectsViewProps) {
   const [showForm, setShowForm] = useState(projects.length === 0);
   const [name, setName] = useState("");
   const [type, setType] = useState("Residencial");
   const [address, setAddress] = useState("");
   const [areaBuilt, setAreaBuilt] = useState("");
   const [finishProfile, setFinishProfile] = useState<PerfilProduto>("Medio custo");
+  const [submitting, setSubmitting] = useState(false);
 
-  function submit(event: FormEvent) {
+  async function submit(event: FormEvent) {
     event.preventDefault();
-    onCreate({ name, type, address, areaBuilt, finishProfile });
-    setName("");
-    setAddress("");
-    setAreaBuilt("");
-    setShowForm(false);
+    setSubmitting(true);
+    try {
+      await onCreate({ name, type, address, areaBuilt, finishProfile });
+      setName("");
+      setAddress("");
+      setAreaBuilt("");
+      setShowForm(false);
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -49,6 +57,9 @@ export function ProjectsView({ projects, onCreate, onOpen }: ProjectsViewProps) 
           Novo projeto
         </button>
       </section>
+
+      {error ? <div className="alert error">{error}</div> : null}
+      {busy ? <div className="alert busy">{busy}</div> : null}
 
       {showForm ? (
         <form className="card blueprint project-form" onSubmit={submit}>
@@ -104,9 +115,9 @@ export function ProjectsView({ projects, onCreate, onOpen }: ProjectsViewProps) 
             <button className="btn btn-secondary" type="button" onClick={() => setShowForm(false)}>
               Cancelar
             </button>
-            <button className="btn btn-primary" type="submit">
+            <button className="btn btn-primary" type="submit" disabled={submitting}>
               <Upload size={16} />
-              Criar
+              {submitting ? "Criando" : "Criar"}
             </button>
           </div>
         </form>

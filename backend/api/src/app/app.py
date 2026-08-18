@@ -6,6 +6,8 @@ from fastapi import FastAPI
 
 from app.controllers.ifc_controller import router as ifc_router
 from app.controllers.pricing_controller import router as pricing_router
+from app.controllers.project_controller import router as project_router
+from app.database import initialize_database
 from app.settings import get_settings
 
 
@@ -21,8 +23,16 @@ app = FastAPI(
     title="Obra Barata API",
     root_path=settings.ROOT_PATH_BACKEND,
 )
+app.include_router(project_router)
 app.include_router(ifc_router)
 app.include_router(pricing_router)
+
+
+@app.on_event("startup")
+def startup() -> None:
+    """Prepare runtime dependencies."""
+
+    initialize_database()
 
 
 @app.get("/health", tags=["health"])

@@ -85,6 +85,35 @@ export interface Project {
   removedMaterialIds: string[];
 }
 
+export interface User {
+  id: string;
+  username: string;
+}
+
+export interface ProjectCreateInput {
+  name: string;
+  type: string;
+  address: string;
+  areaBuilt: string;
+  finishProfile: PerfilProduto;
+}
+
+export type ProjectUpdateInput = Partial<
+  Pick<
+    Project,
+    | "name"
+    | "type"
+    | "address"
+    | "areaBuilt"
+    | "finishProfile"
+    | "status"
+    | "upload"
+    | "materialList"
+    | "pricedList"
+    | "removedMaterialIds"
+  >
+>;
+
 export type Screen = "projects" | "setup" | "compras" | "resumo";
 export type SetupTab = "upload" | "review";
 export type PaymentMode = "avista" | "aprazo";

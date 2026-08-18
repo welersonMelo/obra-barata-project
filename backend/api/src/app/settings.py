@@ -14,6 +14,9 @@ class Settings(BaseSettings):
 
     ROOT_PATH_BACKEND: str = ""
     LOG_LEVEL: str = "INFO"
+    DATABASE_URL: str | None = None
+    TEST_USERNAME: str = "teste"
+    TEST_PASSWORD: str = "teste"
     PRICING_REQUEST_LOG_DIR: Path = Path("/logs/buscar_fornecedores")
 
     OPENAI_API_KEY: str | None = None

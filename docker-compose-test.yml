@@ -13,7 +13,12 @@ services:
       - ./logs:/logs
       - ./data:/data
     depends_on:
-      - redis
+      redis:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-obra_barata}:${POSTGRES_PASSWORD:-obra_barata}@postgres:5432/${POSTGRES_DB:-obra_barata}
     restart: always
     networks:
       - shared_network
@@ -72,6 +77,24 @@ services:
       - shared_network
     restart: always
 
+  postgres:
+    image: postgres:16-alpine
+    container_name: ${PROJECT_NAME}-${DEPLOY_ENV}-postgres
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB:-obra_barata}
+      - POSTGRES_USER=${POSTGRES_USER:-obra_barata}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-obra_barata}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - shared_network
+    restart: always
+
   worker-http:
     build:
       context: backend/api/.
@@ -85,7 +108,12 @@ services:
       - ./logs:/logs
       - ./data:/data
     depends_on:
-      - redis
+      redis:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-obra_barata}:${POSTGRES_PASSWORD:-obra_barata}@postgres:5432/${POSTGRES_DB:-obra_barata}
     networks:
       - shared_network
     restart: always
@@ -103,7 +131,12 @@ services:
       - ./logs:/logs
       - ./data:/data
     depends_on:
-      - redis
+      redis:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-obra_barata}:${POSTGRES_PASSWORD:-obra_barata}@postgres:5432/${POSTGRES_DB:-obra_barata}
     networks:
       - shared_network
     restart: always
@@ -116,3 +149,5 @@ networks:
 volumes:
   redis_data:
     name: ${PROJECT_NAME}-${DEPLOY_ENV}-redis_data-vol
+  postgres_data:
+    name: ${PROJECT_NAME}-${DEPLOY_ENV}-postgres_data-vol
