@@ -9,7 +9,6 @@ import ast
 import hashlib
 import json
 import logging
-import math
 import re
 from datetime import date
 from typing import Annotated, Any, TypedDict
@@ -23,10 +22,10 @@ from langgraph.prebuilt import ToolNode, tools_condition
 from app.models.materials import ListaMateriaisObra, MaterialObra, OfertaFornecedor
 from app.services.ifc.llm_client import build_openai_chat_model
 from app.services.pricing.suppliers import (
-    _parse_amount_unit,
-    _parse_unit_family,
+    _title_matches_material_query,
     build_product_search_text,
     normalize_search_text,
+    purchase_quantity_for_material,
 )
 from app.services.pricing.tools import default_supplier_pricing_tools
 
@@ -48,17 +47,18 @@ Rules:
 - Choose supplier-specific tools by product domain before using a generic web search.
 - Use search_supplier_casa_eletricidade_tool, when available, only for electrical or adjacent materials: fios, cabos, disjuntores, quadros de distribuicao, caixas eletricas, interruptores, tomadas, iluminacao/LED, lampadas, chuveiros ou torneiras eletricas, sensores, transformadores, fita isolante, equipamentos de seguranca/comunicacao, ferramentas eletricas/manuais, instrumentos de medicao, hidraulica, irrigacao e jardinagem.
 - Do not call search_supplier_casa_eletricidade_tool for paint/coatings, floors, masonry, cement, sand, doors/windows, or general finishing unless the material is explicitly electrical or in an adjacent category above.
-- Prefer supplier-specific tools before Serper: Casa da Eletricidade for electrical/similar items; Pisolar and Comercial Alianca for broader construction/finishing items; Serper only when supplier-specific tools are unavailable or return no good offers.
 - Before supplier search, use prepare_product_search_text_tool to turn MaterialObra fields into one concise product query. Use the returned text as product_name in supplier tools and avoid duplicating quantity/medida there; for example, 'Pintura interna (tinta acrilica)' + medida 'lata 18 L' should be searched as 'tinta acrilica 18L'.
 - Use tools to make calculations, conversions, and percentage computations; do not calculate in your head, when possible.
 - Do not invent supplier quotes, product links, freight, installments, or availability.
+- Some construction-service or bulk-base materials must receive a direct AI average-market estimate instead of supplier/site search. When the material prompt says "PRECIFICACAO_DIRETA_IA=true", do not call supplier search tools. Return exactly one offer with fornecedor="Estimativa IA" using a current Brazilian construction-cost reference table: prefer SINAPI (CAIXA/IBGE, Relatorios Mensais de Insumos e Composicoes, UF/SE when location is unknown use the closest current UF/national reference), and use TCPO/PINI, ORSE or SICRO/DNIT only when SINAPI does not cover the item. Cite the chosen table/reference and the assumed unit in justificativa.
+- Do not consider the labor value, just the material/product cost, when using reference tables for average market price.
 - Exception for no-results cases: if all relevant supplier/site search tools return no relevant priced offers, create exactly one estimated offer with fornecedor="Estimativa IA". Use your construction-pricing knowledge to suggest a reasonable average market price for budgeting, based on the material name, description, quantity, unit/measure, product profile, and common Brazilian construction-market units. This is not a supplier quote.
 - For an estimated offer, set link_produto=null, marca=null, frete=null, num_parcelas=1, disponibilidade="Estimativa de preco medio gerada por IA; cotacao real nao encontrada nos fornecedores consultados.", and data_consulta=today.
 - For an estimated offer, use material.medida as unidade. If material.quantidade is available, set offer.quantidade=material.quantidade, valor_unitario as the average price for one material.medida, and calculate valor_total/preco_a_vista/preco_a_prazo = quantidade * valor_unitario. If quantity is null, set quantidade=1, total fields equal to valor_unitario, and explain the uncertainty.
 - In justificativa, explicitly say which supplier tools did not return a usable price, why a site quote was not reliable for this item, the assumption behind the average unit price, and that the value must be reviewed with a real supplier before purchase.
 - Never include "Estimativa IA" when at least one relevant real supplier offer with price exists; real quotes are preferred over estimates.
-- Prefer offers that match product name, unit,and product profile.
-- When you recieve a list of offers, choose the best based on location, name match, unit match, and price.
+- Prefer offers that match product name and product profile, first, and after, consider the closest match to unit, and package size.
+- Remove from the list any product with price 0
 - Do not stop after the first supplier tool if another relevant supplier-specific search tool is available.
 - For broad construction, finishing, painting, tools, hydraulic or similar materials, call both search_supplier_pisolar_tool and search_supplier_comercial_alianca_tool when both are available, then compare the offers.
 - For electrical or adjacent materials, call search_supplier_casa_eletricidade_tool when available; if it does not provide enough good priced offers, also call other relevant supplier tools.
@@ -67,7 +67,7 @@ Rules:
 - Include offers from different suppliers in lista_fornecedores whenever they are available and relevant, even if the cheapest offer is from only one supplier.
 - When deciding purchase quantity, compare material.quantidade + material.medida with each offer.unidade.
 - Treat offer.valor_unitario as the price of one commercial package described by offer.unidade/title, not necessarily the price of one material.medida.
-- If material.quantidade=30 and material.medida='L', then an offer.unidade='30 L' means quantidade=1; offer.unidade='20 L' means quantidade=2. Always round up so the purchase covers the required amount.
+- If material.quantidade=X and material.medida='litros', then an offer.unidade='X L' means quantidade=1. Always round up so the purchase covers the required amount.
 - Use purchase_quantity_tool whenever material.quantidade, material.medida, offer.unidade and offer.valor_unitario are available.
 - Recalculate valor_total, preco_a_vista and preco_a_prazo from package price * purchase quantidade when package size is known.
 - If package size cannot be inferred from offer.unidade or title, keep quantidade=1 for that offer and explain the uncertainty in justificativa.
@@ -101,6 +101,34 @@ Rules:
   "justificativa": "short evidence-based explanation"
 }
 """.strip()
+
+
+AI_MARKET_ESTIMATE_ONLY_ITEMS = (
+    "Chapisco",
+    "Reboco",
+    "Argamassa de assentamento",
+    "Areia média",
+    "Terra",
+    "Cimento CP II-32",
+    "Bloco de concreto",
+    "Unidades de alvenaria de concreto (estrutura)",
+    "Concreto",
+    "Telha cerâmica",
+    "Janela de alumínio com vidro",
+    "Contramarco de alumínio",
+    "Vidro liso",
+    "Verga/contraverga pré-moldada",
+    "Madeira de conífera para estrutura de cobertura",
+    "Camada de suporte de metal (cobertura)",
+)
+AI_MARKET_ESTIMATE_ONLY_PATTERNS = tuple(
+    normalize_search_text(item) for item in AI_MARKET_ESTIMATE_ONLY_ITEMS
+)
+AI_MARKET_ESTIMATE_REFERENCE_TABLES = (
+    "SINAPI (CAIXA/IBGE, Relatorios Mensais de Insumos e Composicoes, "
+    "preferindo a UF de Sergipe/SE quando o projeto nao informar outra localidade); "
+    "TCPO/PINI, ORSE ou SICRO/DNIT somente quando o SINAPI nao cobrir o item."
+)
 
 
 class SupplierPricingReActAgent:
@@ -274,13 +302,27 @@ def _material_prompt(
     area_name: str,
     material: MaterialObra,
     max_fornecedores_por_material: int = 3,
+    force_ai_market_estimate: bool = False,
 ) -> str:
     payload = {
         "area": area_name,
         "material": material.model_dump(mode="json"),
         "data_consulta": date.today().isoformat(),
+        "PRECIFICACAO_DIRETA_IA": force_ai_market_estimate,
     }
+    estimate_rule = ""
+    if force_ai_market_estimate:
+        estimate_rule = (
+            "PRECIFICACAO_DIRETA_IA=true for this material. Do not call supplier search "
+            "tools or site/store tools for it. Generate exactly one budgeting offer with "
+            "fornecedor='Estimativa IA', link_produto=null and num_parcelas=1. Use an "
+            "average current Brazilian market cost from reference tables, prioritizing "
+            f"{AI_MARKET_ESTIMATE_REFERENCE_TABLES} In justificativa, name the table/reference, "
+            "the adopted unit price, the assumed UF/locality and why store tools are not "
+            "appropriate for this item.\n"
+        )
     return (
+        estimate_rule +
         "Find supplier offers for this MaterialObra and return the JSON update only. "
         "Use material.quantidade + material.medida as the required amount, and use offer.unidade "
         "to decide how many commercial packages must be bought. "
@@ -378,29 +420,43 @@ def _enrich_offer_for_material(
 
     updates: dict[str, Any] = {}
     purchase_quantity = offer.quantidade
-
-    if (
-        purchase_quantity is None
-        and material.quantidade is not None
-        and material.medida
-        and offer.unidade
-    ):
-        required_family = _parse_unit_family(material.medida)
-        offer_size, offer_family = _parse_amount_unit(offer.unidade)
-        if required_family and offer_family and required_family == offer_family and offer_size:
-            purchase_quantity = math.ceil(material.quantidade / offer_size)
+    calculated_quantity = purchase_quantity_for_material(
+        required_quantity=material.quantidade,
+        required_unit=material.medida,
+        offer_unit=offer.unidade,
+    )
+    if calculated_quantity is not None:
+        purchase_quantity = calculated_quantity
+        if offer.quantidade != purchase_quantity:
             updates["quantidade"] = float(purchase_quantity)
 
     if purchase_quantity is not None and offer.valor_unitario is not None:
         total_price = round(float(offer.valor_unitario) * float(purchase_quantity), 2)
-        if offer.valor_total is None:
+        if calculated_quantity is not None or offer.valor_total is None:
             updates["valor_total"] = total_price
-        if offer.preco_a_vista is None:
+        if calculated_quantity is not None or offer.preco_a_vista is None:
             updates["preco_a_vista"] = total_price
-        if offer.preco_a_prazo is None:
+        if calculated_quantity is not None or offer.preco_a_prazo is None:
             updates["preco_a_prazo"] = total_price
 
     return offer.model_copy(update=updates) if updates else offer
+
+
+def _offer_matches_requested_material(
+    material: MaterialObra,
+    offer: OfertaFornecedor,
+) -> bool:
+    """Keep supplier alternatives tied to the requested product, not accessories."""
+
+    if _is_ai_estimate_offer(offer) or not offer.descricao:
+        return True
+    search_text = build_product_search_text(
+        nome=material.nome,
+        descricao=material.descricao,
+        quantidade=material.quantidade,
+        medida=material.medida,
+    )
+    return _title_matches_material_query(search_text, offer.descricao)
 
 
 def _select_offer_options(
@@ -517,6 +573,44 @@ def _merge_supplier_offer_payloads(update_payload: dict, extra_offers: list[dict
     if merged_offers:
         merged_payload["lista_fornecedores"] = merged_offers
     return merged_payload
+
+
+def _is_ai_market_estimate_only_material(
+    area_name: str,
+    material: MaterialObra,
+) -> bool:
+    """Return whether a material should skip store searches and use an AI table estimate."""
+
+    haystack = normalize_search_text(
+        f"{area_name} {material.nome} {material.descricao} {material.medida}"
+    )
+    haystack_tokens = set(haystack.split())
+    haystack_compact = haystack.replace(" ", "")
+    for pattern in AI_MARKET_ESTIMATE_ONLY_PATTERNS:
+        pattern_tokens = set(pattern.split())
+        if len(pattern_tokens) == 1:
+            if pattern in haystack_tokens:
+                return True
+            continue
+        if pattern in haystack or pattern.replace(" ", "") in haystack_compact:
+            return True
+        if pattern_tokens and pattern_tokens <= haystack_tokens:
+            return True
+    return False
+
+
+def _tools_without_supplier_store_search(tools: list | None) -> list:
+    """Keep calculation helpers and remove supplier/site search tools for direct IA estimates."""
+
+    filtered_tools = []
+    for tool in tools or []:
+        tool_name = _tool_name(tool)
+        if tool_name.startswith("search_supplier_"):
+            continue
+        if tool_name == "prepare_product_search_text_tool":
+            continue
+        filtered_tools.append(tool)
+    return filtered_tools
 
 
 ELECTRICAL_SUPPLIER_TERMS = {
@@ -686,6 +780,7 @@ def _apply_supplier_update(
     offers = [
         _enrich_offer_for_material(material, offer)
         for offer in _valid_offer_payloads(update_payload)
+        if _offer_matches_requested_material(material, offer)
     ]
     offers = _discard_ai_estimates_when_real_priced_offers_exist(offers)
     offers = _select_offer_options(offers, max_fornecedores_por_material)
@@ -735,6 +830,7 @@ def reason_about_material_suppliers(
     material: MaterialObra,
     thread_id: str,
     max_fornecedores_por_material: int = 3,
+    force_ai_market_estimate: bool = False,
 ) -> dict:
     _log_reasoning_event(
         f"Starting supplier reasoning thread={thread_id}",
@@ -752,6 +848,7 @@ def reason_about_material_suppliers(
                         area_name=area_name,
                         material=material,
                         max_fornecedores_por_material=max_fornecedores_por_material,
+                        force_ai_market_estimate=force_ai_market_estimate,
                     )
                 ),
             ]
@@ -798,11 +895,14 @@ def preencher_fornecedores_com_reasoning_agent(
     offer_limit = max(int(offer_limit), 0)
     material_processing_limit = max_materiais_processados
 
+    resolved_llm = reasoning_llm or build_openai_chat_model()
     agent = build_supplier_reasoning_agent(
-        reasoning_llm=reasoning_llm or build_openai_chat_model(),
+        reasoning_llm=resolved_llm,
         supplier_search_tools=supplier_search_tools,
         checkpointer=MemorySaver(),
     )
+    estimate_only_agent = None
+    estimate_only_tools = _tools_without_supplier_store_search(supplier_search_tools)
     _log_reasoning_event(
         "Supplier fill limits",
         {
@@ -835,19 +935,43 @@ def preencher_fornecedores_com_reasoning_agent(
                     "perfil": material.perfil_produto,
                 },
             )
+            force_ai_market_estimate = _is_ai_market_estimate_only_material(
+                area_name=area.area,
+                material=material,
+            )
+            active_agent = agent
+            if force_ai_market_estimate:
+                if estimate_only_agent is None:
+                    estimate_only_agent = build_supplier_reasoning_agent(
+                        reasoning_llm=resolved_llm,
+                        supplier_search_tools=estimate_only_tools,
+                        checkpointer=MemorySaver(),
+                    )
+                active_agent = estimate_only_agent
+                _log_reasoning_event(
+                    "AI market estimate only; supplier store tools skipped",
+                    {
+                        "area": area.area,
+                        "material": material.nome,
+                        "reference_tables": AI_MARKET_ESTIMATE_REFERENCE_TABLES,
+                    },
+                )
             update_payload = reason_about_material_suppliers(
-                agent=agent,
+                agent=active_agent,
                 area_name=area.area,
                 material=material,
                 thread_id=thread_id,
                 max_fornecedores_por_material=offer_limit,
+                force_ai_market_estimate=force_ai_market_estimate,
             )
-            complementary_offers = _missing_relevant_supplier_tool_offers(
-                supplier_search_tools=supplier_search_tools,
-                area_name=area.area,
-                material=material,
-                update_payload=update_payload,
-            )
+            complementary_offers = []
+            if not force_ai_market_estimate:
+                complementary_offers = _missing_relevant_supplier_tool_offers(
+                    supplier_search_tools=supplier_search_tools,
+                    area_name=area.area,
+                    material=material,
+                    update_payload=update_payload,
+                )
             if complementary_offers:
                 update_payload = _merge_supplier_offer_payloads(
                     update_payload,
