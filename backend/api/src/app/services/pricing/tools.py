@@ -25,6 +25,7 @@ from app.services.pricing.suppliers import (
     _parse_amount_unit,
     _parse_unit_family,
     build_product_search_text,
+    purchase_quantity_for_material,
 )
 
 
@@ -143,33 +144,38 @@ def purchase_quantity_tool(
 ) -> dict:
     """Calculate how many commercial packages to buy based on required amount and offer unit."""
 
-    required_family = _parse_unit_family(required_unit)
-    offer_size, offer_family = _parse_amount_unit(offer_unit)
-
     if required_quantity is None or required_quantity <= 0:
         return {"error": "required_quantity must be greater than zero."}
-    if not required_family:
-        return {"error": f"Could not infer required unit family from '{required_unit}'."}
-    if offer_size is None or not offer_family:
-        return {"error": f"Could not infer package size from offer_unit '{offer_unit}'."}
-    if required_family != offer_family:
+    purchase_quantity = purchase_quantity_for_material(
+        required_quantity=required_quantity,
+        required_unit=required_unit,
+        offer_unit=offer_unit,
+    )
+    if purchase_quantity is None:
+        required_family = _parse_unit_family(required_unit)
+        offer_size, offer_family = _parse_amount_unit(offer_unit)
         return {
-            "error": "required_unit and offer_unit are not compatible.",
+            "error": "Could not infer a compatible commercial purchase quantity.",
             "required_unit": required_unit,
             "offer_unit": offer_unit,
             "required_family": required_family,
             "offer_family": offer_family,
         }
 
-    purchase_quantity = math.ceil(required_quantity / offer_size)
-    covered_quantity = purchase_quantity * offer_size
+    required_size, required_family = _parse_amount_unit(required_unit)
+    offer_size, offer_family = _parse_amount_unit(offer_unit)
+    covered_quantity = (
+        purchase_quantity * offer_size
+        if required_size is not None and offer_size is not None and required_family == offer_family
+        else purchase_quantity
+    )
     total_price = unit_price * purchase_quantity if unit_price is not None else None
     return {
         "required_quantity": required_quantity,
         "required_unit": required_unit,
         "offer_unit": offer_unit,
-        "package_size": offer_size,
-        "unit_family": required_family,
+        "package_size": offer_size or 1,
+        "unit_family": required_family or "commercial_package",
         "purchase_quantity": purchase_quantity,
         "covered_quantity": covered_quantity,
         "unit_price": unit_price,

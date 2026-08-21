@@ -13,6 +13,7 @@ import {
   numberText,
   offerPurchaseQuantity,
   offerTotalForMaterial,
+  relevantSupplierOffers,
 } from "../utils/materials";
 
 interface PricingViewProps {
@@ -107,7 +108,7 @@ export function PricingView({
         <div className="material-list">
           {materials.map(({ area, material }) => {
             const selected = bestOffer(material);
-            const offers = material.lista_fornecedores;
+            const offers = relevantSupplierOffers(material);
             return (
               <article key={`${area}-${material.nome}`} className="card blueprint material-card">
                 <i className="corner tl" />

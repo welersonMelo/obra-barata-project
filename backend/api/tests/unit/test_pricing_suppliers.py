@@ -3,10 +3,13 @@ from app.services.pricing.suppliers import (
     _parse_amount_unit,
     _parse_unit_family,
     build_product_search_text,
+    enrich_offer_for_material,
+    purchase_quantity_for_material,
     _scrape_storefront_search_offers,
     _scrape_tray_datalayer_offers,
     _title_matches_material_query,
 )
+from app.models.materials import MaterialObra, OfertaFornecedor
 
 
 def test_storefront_scraper_ignores_navigation_categories_for_rejunte():
@@ -163,3 +166,40 @@ def test_build_product_search_text_does_not_duplicate_existing_package_size():
 def test_unit_parser_supports_cubic_meters():
     assert _parse_unit_family("m3") == "m3"
     assert _parse_amount_unit("2,5 m3") == (2.5, "m3")
+
+
+def test_pipe_search_rejects_accessory_and_keeps_the_pipe_product():
+    query = "Tubo PVC soldavel 25 mm 6 m"
+
+    assert not _title_matches_material_query(
+        query,
+        "Abracadeira para Tubo Soldavel 25mm - Tigre",
+    )
+    assert _title_matches_material_query(
+        query,
+        "Cano PVC 25 mm x 6 m Soldavel - Tigre",
+    )
+
+
+def test_purchase_quantity_keeps_explicit_bar_count():
+    assert purchase_quantity_for_material(8, "barra 6 m", "6 m") == 8
+
+    offer = enrich_offer_for_material(
+        MaterialObra(nome="Tubo PVC soldavel 25 mm", quantidade=8, medida="barra 6 m"),
+        OfertaFornecedor(
+            fornecedor="Grupo Pisolar",
+            descricao="Cano PVC 25 mm x 6 m Soldavel - Tigre",
+            unidade="6 m",
+            quantidade=2,
+            valor_unitario=28.45,
+        ),
+    )
+
+    assert offer.quantidade == 8
+    assert offer.valor_total == 227.6
+    assert offer.preco_a_vista == 227.6
+    assert offer.preco_a_prazo == 227.6
+
+
+def test_purchase_quantity_keeps_explicit_package_count():
+    assert purchase_quantity_for_material(10, "pct", "pct") == 10

@@ -31,7 +31,7 @@ function normalizeMeasureText(value: string | null | undefined): string {
 }
 
 function hasPackageWord(measure: string | null | undefined): boolean {
-  return /\b(saco|sacos|lata|latas|caixa|caixas|cx|pacote|pacotes|rolo|rolos|fardo|fardos|galao|galoes|balde|baldes)\b/.test(
+  return /\b(saco|sacos|lata|latas|caixa|caixas|cx|pacote|pacotes|pct|pcts|rolo|rolos|fardo|fardos|galao|galoes|balde|baldes|barra|barras)\b/.test(
     normalizeMeasureText(measure),
   );
 }
@@ -133,13 +133,31 @@ export function materialQuantityText(material: MaterialObra): string {
   return material.quantidade == null ? material.medida || "-" : `${quantity} ${material.medida}`;
 }
 
+function isPipeAccessoryOffer(material: MaterialObra, offer: OfertaFornecedor): boolean {
+  const materialText = normalizeMeasureText(`${material.nome} ${material.descricao}`);
+  if (!/\b(tubo|cano)\b/.test(materialText)) return false;
+
+  const offerText = normalizeMeasureText(offer.descricao);
+  return /^(abracadeira|adaptador|cap|conexao|joelho|luva|reducao|registro|te|tampa|uniao|valvula)\b/.test(
+    offerText,
+  );
+}
+
+export function relevantSupplierOffers(material: MaterialObra): OfertaFornecedor[] {
+  return material.lista_fornecedores.filter(
+    (offer) => !isPipeAccessoryOffer(material, offer),
+  );
+}
+
 export function bestOffer(material: MaterialObra): OfertaFornecedor | null {
-  if (material.lista_fornecedores.length > 0) {
-    const byFornecedor = material.lista_fornecedores.find(
+  const offers = relevantSupplierOffers(material);
+  if (offers.length > 0) {
+    const byFornecedor = offers.find(
       (offer) => offer.fornecedor === material.fornecedor,
     );
-    return byFornecedor ?? material.lista_fornecedores[0];
+    return byFornecedor ?? offers[0];
   }
+  if (material.lista_fornecedores.length > 0) return null;
   if (!material.fornecedor) return null;
   return {
     fornecedor: material.fornecedor,
@@ -215,12 +233,7 @@ export function offerTotalForMaterial(
   if (offer.valor_unitario != null && purchaseQuantity != null && purchaseQuantity > 0) {
     const computedTotal = roundMoney(offer.valor_unitario * purchaseQuantity);
     if (explicitTotal == null) return computedTotal;
-    if (purchaseQuantity > 1 && almostEqual(explicitTotal, offer.valor_unitario)) {
-      return computedTotal;
-    }
-    if (purchaseQuantity > 1 && explicitTotal < offer.valor_unitario) {
-      return computedTotal;
-    }
+    if (!almostEqual(explicitTotal, computedTotal)) return computedTotal;
   }
 
   return explicitTotal;

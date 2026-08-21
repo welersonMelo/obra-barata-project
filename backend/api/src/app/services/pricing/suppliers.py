@@ -245,7 +245,30 @@ def _title_matches_material_query(query: str, title: str | None) -> bool:
     query_tokens = _meaningful_query_tokens(query)
     if not query_tokens:
         return True
-    title_tokens = set(normalize_search_text(title).split())
+    normalized_title = normalize_search_text(title)
+    title_tokens = set(normalized_title.split())
+
+    # A pipe search can otherwise accept accessories such as "abracadeira para
+    # tubo" because they repeat some of the requested pipe attributes.
+    pipe_query_tokens = {"tubo", "cano"}
+    if query_tokens & pipe_query_tokens:
+        accessory_prefixes = (
+            "abracadeira",
+            "adaptador",
+            "cap",
+            "conexao",
+            "joelho",
+            "luva",
+            "reducao",
+            "registro",
+            "te",
+            "tampa",
+            "uniao",
+            "valvula",
+        )
+        if any(normalized_title.startswith(f"{prefix} ") for prefix in accessory_prefixes):
+            return False
+
     return any(
         _tokens_match_flexibly(query_token, title_token)
         for query_token in query_tokens
@@ -688,6 +711,69 @@ def _parse_unit_family(unit_text: str | None) -> str | None:
 
     _amount, family = _parse_amount_unit(f"1 {unit_text}" if unit_text else None)
     return family
+
+
+_COMMERCIAL_PACKAGE_TYPES = (
+    ("saco", ("saco", "sacos")),
+    ("lata", ("lata", "latas")),
+    ("caixa", ("caixa", "caixas", "cx")),
+    ("pacote", ("pacote", "pacotes", "pct", "pcts")),
+    ("rolo", ("rolo", "rolos")),
+    ("fardo", ("fardo", "fardos")),
+    ("galao", ("galao", "galoes")),
+    ("balde", ("balde", "baldes")),
+    ("barra", ("barra", "barras")),
+)
+
+
+def _commercial_package_type(unit_text: str | None) -> str | None:
+    """Return the package type explicitly stated in a commercial unit."""
+
+    tokens = set(normalize_search_text(unit_text).split())
+    for package_type, aliases in _COMMERCIAL_PACKAGE_TYPES:
+        if tokens.intersection(aliases):
+            return package_type
+    return None
+
+
+def purchase_quantity_for_material(
+    required_quantity: float | int | None,
+    required_unit: str | None,
+    offer_unit: str | None,
+) -> int | None:
+    """Calculate purchase packages without treating package counts as base units.
+
+    For example, "8 barra 6 m" means eight commercial bars, not eight metres.
+    """
+
+    if required_quantity is None or required_quantity <= 0 or not required_unit or not offer_unit:
+        return None
+
+    required_package_type = _commercial_package_type(required_unit)
+    offer_package_type = _commercial_package_type(offer_unit)
+    required_size, required_family = _parse_amount_unit(required_unit)
+    offer_size, offer_family = _parse_amount_unit(offer_unit)
+
+    if required_package_type:
+        if required_package_type == offer_package_type:
+            return math.ceil(float(required_quantity))
+        if (
+            required_size is not None
+            and offer_size is not None
+            and required_family == offer_family
+            and math.isclose(required_size, offer_size, rel_tol=0, abs_tol=0.001)
+        ):
+            return math.ceil(float(required_quantity))
+        return None
+
+    if (
+        required_family
+        and offer_family
+        and required_family == offer_family
+        and offer_size
+    ):
+        return math.ceil(float(required_quantity) / offer_size)
+    return None
 
 
 def _extract_js_array_assignment(script_text: str, variable_name: str) -> str | None:
@@ -1812,23 +1898,26 @@ def enrich_offer_for_material(
         updates["unidade"] = offer_unit
 
     purchase_quantity = offer.quantidade
-    if purchase_quantity is None and material.quantidade is not None and material.medida:
-        required_family = _parse_unit_family(material.medida)
-        offer_size, offer_family = _parse_amount_unit(offer_unit)
-        if required_family and offer_family and required_family == offer_family and offer_size:
-            purchase_quantity = math.ceil(float(material.quantidade) / offer_size)
+    calculated_quantity = purchase_quantity_for_material(
+        required_quantity=material.quantidade,
+        required_unit=material.medida,
+        offer_unit=offer_unit,
+    )
+    if calculated_quantity is not None:
+        purchase_quantity = calculated_quantity
+        if offer.quantidade != purchase_quantity:
             updates["quantidade"] = float(purchase_quantity)
-        elif offer.valor_unitario is not None and not offer_unit:
-            purchase_quantity = 1
-            updates["quantidade"] = 1
+    elif purchase_quantity is None and offer.valor_unitario is not None and not offer_unit:
+        purchase_quantity = 1
+        updates["quantidade"] = 1
 
     if purchase_quantity is not None and offer.valor_unitario is not None:
         total_price = round(float(offer.valor_unitario) * float(purchase_quantity), 2)
-        if offer.valor_total is None:
+        if calculated_quantity is not None or offer.valor_total is None:
             updates["valor_total"] = total_price
-        if offer.preco_a_vista is None:
+        if calculated_quantity is not None or offer.preco_a_vista is None:
             updates["preco_a_vista"] = total_price
-        if offer.preco_a_prazo is None:
+        if calculated_quantity is not None or offer.preco_a_prazo is None:
             updates["preco_a_prazo"] = total_price
 
     return offer.model_copy(update=updates) if updates else offer
